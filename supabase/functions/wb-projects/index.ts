@@ -17,44 +17,27 @@ Deno.serve(async (req: Request) => {
     const url = new URL(req.url);
 
     const page = url.searchParams.get('page') || '1';
-    const pageSize = url.searchParams.get('pageSize') || '50';
-    const offset = ((parseInt(page) - 1) * parseInt(pageSize)).toString();
+    const requestedPageSize = parseInt(url.searchParams.get('pageSize') || '50');
 
-    let wbUrl = `${WB_API_URL}?format=json&rows=${pageSize}&os=${offset}`;
+    // Fetch more rows than requested to account for filtering
+    const fetchSize = 200;
+    const offset = ((parseInt(page) - 1) * fetchSize).toString();
+
+    let wbUrl = `${WB_API_URL}?format=json&rows=${fetchSize}&os=${offset}`;
     wbUrl += '&fl=id,project_name,countryname,countryshortname,regionname,status,totalamt,sector1,mjsector1Name,theme1,mjtheme_namecode,boardapprovaldate,approvalfy,url';
     wbUrl += '&srt=boardapprovaldate+desc';
 
-    // Build query terms for World Bank API
-    const queryTerms: string[] = [];
-
-    // Add status filter to World Bank API query
+    // Get filter parameters
     const statuses = url.searchParams.get('statuses');
-    if (statuses) {
-      const statusList = statuses.split(',');
-      if (statusList.length > 0) {
-        const statusQuery = statusList.map(s => `status_exact:\"${s}\"`).join(' OR ');
-        queryTerms.push(`(${statusQuery})`);
-      }
-    }
+    const statusList = statuses ? statuses.split(',') : [];
 
-    // Add region filter to World Bank API query
     const regions = url.searchParams.get('regions');
-    if (regions && regions !== 'All') {
-      queryTerms.push(`regionname_exact:\"${regions}\"`);
-    }
-
-    // Add keyword search to World Bank API query
     const keyword = url.searchParams.get('keyword');
-    if (keyword) {
-      queryTerms.push(keyword);
-    }
-
-    // Combine all query terms
-    if (queryTerms.length > 0) {
-      wbUrl += `&qterm=${encodeURIComponent(queryTerms.join(' AND '))}`;
-    }
+    const yearFrom = url.searchParams.get('yearFrom');
+    const yearTo = url.searchParams.get('yearTo');
 
     console.log('Fetching from World Bank API:', wbUrl);
+    console.log('Filters - Statuses:', statusList, 'Region:', regions, 'Keyword:', keyword);
 
     const response = await fetch(wbUrl);
 
@@ -63,26 +46,62 @@ Deno.serve(async (req: Request) => {
     }
 
     const data = await response.json();
-
     let projectsArray = data.projects ? Object.values(data.projects) : [];
 
-    // Apply year filter client-side (World Bank API year filtering is inconsistent)
-    const yearFrom = url.searchParams.get('yearFrom');
-    const yearTo = url.searchParams.get('yearTo');
+    console.log(`Fetched ${projectsArray.length} projects from API`);
+
+    // Apply status filter
+    if (statusList.length > 0) {
+      const beforeFilter = projectsArray.length;
+      projectsArray = projectsArray.filter((p: any) =>
+        statusList.includes(p.status)
+      );
+      console.log(`Status filter: ${beforeFilter} -> ${projectsArray.length} projects`);
+    }
+
+    // Apply region filter
+    if (regions && regions !== 'All') {
+      const beforeFilter = projectsArray.length;
+      projectsArray = projectsArray.filter((p: any) => p.regionname === regions);
+      console.log(`Region filter: ${beforeFilter} -> ${projectsArray.length} projects`);
+    }
+
+    // Apply year filter
     if (yearFrom && yearTo) {
       const fromYear = parseInt(yearFrom);
       const toYear = parseInt(yearTo);
+      const beforeFilter = projectsArray.length;
       projectsArray = projectsArray.filter((p: any) => {
         if (!p.approvalfy) return false;
         const year = parseInt(p.approvalfy);
         return year >= fromYear && year <= toYear;
       });
+      console.log(`Year filter: ${beforeFilter} -> ${projectsArray.length} projects`);
     }
+
+    // Apply keyword filter
+    if (keyword) {
+      const searchTerm = keyword.toLowerCase();
+      const beforeFilter = projectsArray.length;
+      projectsArray = projectsArray.filter((p: any) =>
+        (p.project_name && p.project_name.toLowerCase().includes(searchTerm)) ||
+        (p.countryname && JSON.stringify(p.countryname).toLowerCase().includes(searchTerm))
+      );
+      console.log(`Keyword filter: ${beforeFilter} -> ${projectsArray.length} projects`);
+    }
+
+    // Paginate results
+    const totalFiltered = projectsArray.length;
+    const startIdx = 0;
+    const endIdx = Math.min(requestedPageSize, projectsArray.length);
+    const paginatedProjects = projectsArray.slice(startIdx, endIdx);
+
+    console.log(`Returning ${paginatedProjects.length} projects (total filtered: ${totalFiltered})`);
 
     return new Response(
       JSON.stringify({
-        total: projectsArray.length,
-        projects: projectsArray,
+        total: totalFiltered,
+        projects: paginatedProjects,
         mock: false
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
