@@ -6,7 +6,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
-const WB_API_URL = 'https://search.worldbank.org/api/v2/projects';
+const WB_API_URL = 'https://search.worldbank.org/api/v3/projects';
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
@@ -21,7 +21,7 @@ Deno.serve(async (req: Request) => {
     const offset = ((parseInt(page) - 1) * parseInt(pageSize)).toString();
 
     let wbUrl = `${WB_API_URL}?format=json&rows=${pageSize}&os=${offset}`;
-    wbUrl += '&fl=id,project_name,countryname,countryshortname,regionname,status,projectstatusdisplay,totalamt,sector1,mjsector1Name,theme1,mjtheme_namecode,boardapprovaldate,approvalfy,url';
+    wbUrl += '&fl=id,project_name,countryname,countryshortname,regionname,status,totalamt,sector1,mjsector1Name,theme1,mjtheme_namecode,boardapprovaldate,approvalfy,url';
     wbUrl += '&srt=boardapprovaldate+desc';
 
     console.log('Fetching from World Bank API:', wbUrl);
@@ -45,7 +45,7 @@ Deno.serve(async (req: Request) => {
     if (statuses) {
       const statusList = statuses.split(',');
       projectsArray = projectsArray.filter((p: any) =>
-        statusList.includes(p.projectstatusdisplay)
+        statusList.includes(p.status)
       );
     }
 

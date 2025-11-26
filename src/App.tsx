@@ -133,7 +133,6 @@ interface Project {
   countryname: string | string[];
   regionname: string;
   status: string;
-  projectstatusdisplay: string;
   totalamt: string;
   sector1?: { Name: string };
   mjsector1Name?: string;
@@ -406,7 +405,7 @@ function App() {
               region: project.regionname,
               sector: project.sector1?.Name || project.mjsector1Name,
               amount: project.totalamt,
-              status: project.projectstatusdisplay || project.status,
+              status: project.status,
               score_data: result,
               updated_at: new Date().toISOString()
             });
@@ -509,8 +508,8 @@ function App() {
           bValue = parseInt((b.totalamt || '0').replace(/,/g, ''), 10);
           break;
         case 'status':
-          aValue = (a.projectstatusdisplay || a.status || '').toLowerCase();
-          bValue = (b.projectstatusdisplay || b.status || '').toLowerCase();
+          aValue = (a.status || '').toLowerCase();
+          bValue = (b.status || '').toLowerCase();
           break;
         case 'score':
           aValue = scores[a.id]?.overall_score || 0;
@@ -933,7 +932,7 @@ function App() {
                         <td className="p-3 text-sm">{project.sector1?.Name || project.mjsector1Name || 'N/A'}</td>
                         <td className="p-3 text-sm font-semibold">{formatAmount(project.totalamt)}</td>
                         <td className="p-3">
-                          <StatusBadge status={project.projectstatusdisplay || project.status} />
+                          <StatusBadge status={project.status} />
                         </td>
                         <td className="p-3">
                           <ScoreBadge score={scores[project.id]} />
