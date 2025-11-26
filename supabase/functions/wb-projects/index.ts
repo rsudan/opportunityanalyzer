@@ -24,6 +24,36 @@ Deno.serve(async (req: Request) => {
     wbUrl += '&fl=id,project_name,countryname,countryshortname,regionname,status,totalamt,sector1,mjsector1Name,theme1,mjtheme_namecode,boardapprovaldate,approvalfy,url';
     wbUrl += '&srt=boardapprovaldate+desc';
 
+    // Build query terms for World Bank API
+    const queryTerms: string[] = [];
+
+    // Add status filter to World Bank API query
+    const statuses = url.searchParams.get('statuses');
+    if (statuses) {
+      const statusList = statuses.split(',');
+      if (statusList.length > 0) {
+        const statusQuery = statusList.map(s => `status_exact:\"${s}\"`).join(' OR ');
+        queryTerms.push(`(${statusQuery})`);
+      }
+    }
+
+    // Add region filter to World Bank API query
+    const regions = url.searchParams.get('regions');
+    if (regions && regions !== 'All') {
+      queryTerms.push(`regionname_exact:\"${regions}\"`);
+    }
+
+    // Add keyword search to World Bank API query
+    const keyword = url.searchParams.get('keyword');
+    if (keyword) {
+      queryTerms.push(keyword);
+    }
+
+    // Combine all query terms
+    if (queryTerms.length > 0) {
+      wbUrl += `&qterm=${encodeURIComponent(queryTerms.join(' AND '))}`;
+    }
+
     console.log('Fetching from World Bank API:', wbUrl);
 
     const response = await fetch(wbUrl);
@@ -36,19 +66,7 @@ Deno.serve(async (req: Request) => {
 
     let projectsArray = data.projects ? Object.values(data.projects) : [];
 
-    const regions = url.searchParams.get('regions');
-    if (regions && regions !== 'All') {
-      projectsArray = projectsArray.filter((p: any) => p.regionname === regions);
-    }
-
-    const statuses = url.searchParams.get('statuses');
-    if (statuses) {
-      const statusList = statuses.split(',');
-      projectsArray = projectsArray.filter((p: any) =>
-        statusList.includes(p.status)
-      );
-    }
-
+    // Apply year filter client-side (World Bank API year filtering is inconsistent)
     const yearFrom = url.searchParams.get('yearFrom');
     const yearTo = url.searchParams.get('yearTo');
     if (yearFrom && yearTo) {
@@ -59,15 +77,6 @@ Deno.serve(async (req: Request) => {
         const year = parseInt(p.approvalfy);
         return year >= fromYear && year <= toYear;
       });
-    }
-
-    const keyword = url.searchParams.get('keyword');
-    if (keyword) {
-      const searchTerm = keyword.toLowerCase();
-      projectsArray = projectsArray.filter((p: any) =>
-        (p.project_name && p.project_name.toLowerCase().includes(searchTerm)) ||
-        (p.countryname && JSON.stringify(p.countryname).toLowerCase().includes(searchTerm))
-      );
     }
 
     return new Response(
