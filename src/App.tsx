@@ -26,64 +26,74 @@ The Lab creates value through three capabilities:
 PROJECT TO ANALYZE:
 - Name: [[project_name]]
 - Country: [[country]]
+- Domain: [[domain]]
 - Amount: $[[amount]]
 
-I conducted web research on innovation in this project's domain. Analyze the search results to score innovation potential.
+Based on the web research findings provided above, evaluate this project's potential for Innovation Lab engagement.
 
----
-SEARCH 1: EMERGING TECHNOLOGY
-Query: "[[domain]] emerging technology innovation"
-Results:
-[[emerging_tech_results]]
-
----
-SEARCH 2: FUTURE TRENDS & FORESIGHT
-Query: "[[domain]] future trends 2030 disruption"
-Results:
-[[foresight_results]]
-
----
-SEARCH 3: COLLECTIVE INTELLIGENCE & ECOSYSTEM
-Query: "[[domain]] innovation challenge hackathon startup"
-Results:
-[[collective_intel_results]]
-
----
-
-Based on this research, evaluate the project's potential for Innovation Lab engagement.
+IMPORTANT ANALYSIS REQUIREMENTS:
+1. Reference SPECIFIC findings from the search results (companies, initiatives, technologies by name)
+2. Cite SOURCE URLS for key evidence points
+3. Provide CONCRETE examples rather than generic statements
+4. If search results are limited, acknowledge this and score conservatively
+5. Focus on ACTIONABLE opportunities that the Lab could pursue
 
 RESPOND WITH VALID JSON ONLY (no markdown code blocks):
 {
   "emerging_tech": {
     "score": <1-10>,
-    "technologies": ["<relevant tech found>"],
-    "applications": ["<how it applies to this project>"],
-    "evidence": "<1-2 sentence summary of findings>"
+    "technologies": ["<specific technologies found in research with names>"],
+    "applications": ["<concrete applications mentioned in sources>"],
+    "evidence": "<2-3 sentence summary citing specific findings and sources>",
+    "key_players": ["<named companies, organizations, or initiatives from research>"]
   },
   "foresight": {
     "score": <1-10>,
-    "disruptions": ["<anticipated changes in this domain>"],
+    "disruptions": ["<specific disruptions/trends from research>"],
     "horizon": "<near-term|medium-term|long-term>",
-    "evidence": "<1-2 sentence summary>"
+    "evidence": "<2-3 sentence summary with specific trends and timeframes>",
+    "strategic_risks": ["<key risks or uncertainties identified>"]
   },
   "collective_intelligence": {
     "score": <1-10>,
     "ecosystem_activity": "<high|medium|low>",
-    "examples": ["<relevant challenges, hackathons, or initiatives found>"],
-    "evidence": "<1-2 sentence summary>"
+    "examples": ["<named challenges, hackathons, accelerators from research>"],
+    "evidence": "<2-3 sentence summary with concrete ecosystem examples>",
+    "stakeholders": ["<key ecosystem players identified>"]
   },
   "relevance": {
     "score": <1-10>,
-    "rationale": "<why these innovations apply to this specific project and country>"
+    "rationale": "<detailed rationale connecting research findings to this specific project context>",
+    "country_context": "<specific insights about innovation readiness in [[country]]>"
   },
   "top_opportunities": [
     {
-      "opportunity": "<specific innovation opportunity>",
-      "dimension": "<foresight|emerging_tech|collective_intel>",
-      "approach": "<Proof of Value|Foresight Workshop|Innovation Challenge|Hackathon|Scoping Study>"
+      "opportunity": "<specific, actionable opportunity based on research>",
+      "dimension": "<foresight|emerging_tech|collective_intelligence>",
+      "approach": "<Proof of Value|Foresight Workshop|Innovation Challenge|Hackathon|Scoping Study>",
+      "rationale": "<why this opportunity is relevant based on findings>",
+      "potential_partners": ["<organizations from research that could collaborate>"]
+    },
+    {
+      "opportunity": "<second specific opportunity>",
+      "dimension": "<dimension>",
+      "approach": "<approach>",
+      "rationale": "<rationale>",
+      "potential_partners": ["<partners>"]
+    },
+    {
+      "opportunity": "<third specific opportunity>",
+      "dimension": "<dimension>",
+      "approach": "<approach>",
+      "rationale": "<rationale>",
+      "potential_partners": ["<partners>"]
     }
   ],
-  "key_insight": "<one sentence strategic recommendation for Lab engagement>"
+  "overall_score": <1-10 weighted average>,
+  "primary_dimension": "<foresight|emerging_tech|collective_intelligence>",
+  "key_insight": "<one sentence strategic recommendation>",
+  "research_quality": "<high|medium|low - assess quality of search results>",
+  "confidence_level": "<high|medium|low - confidence in scoring given available data>"
 }`;
 
 const DEFAULT_REPORT_PROMPT = `INNOVATION OPPORTUNITY ASSESSMENT REPORT GENERATOR

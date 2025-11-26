@@ -12,6 +12,13 @@ interface Project {
   countryname: string | string[];
   totalamt: string;
   sector1?: { Name: string };
+  regionname?: string;
+}
+
+interface SearchResult {
+  title: string;
+  url: string;
+  description: string;
 }
 
 function extractDomain(project: Project): string {
@@ -44,6 +51,59 @@ function extractDomain(project: Project): string {
   if (sector) return sector.toLowerCase();
 
   return 'development';
+}
+
+async function performWebSearch(query: string, count: number = 10): Promise<SearchResult[]> {
+  try {
+    // Using DuckDuckGo HTML scraping (no API key required)
+    const searchUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
+
+    console.log(`Searching: ${query}`);
+
+    const response = await fetch(searchUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      }
+    });
+
+    if (!response.ok) {
+      console.warn(`Search failed for: ${query}`);
+      return [];
+    }
+
+    const html = await response.text();
+
+    // Parse results from HTML
+    const results: SearchResult[] = [];
+    const resultRegex = /<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>([^<]+)<\/a>[\s\S]*?<a[^>]+class="result__snippet"[^>]*>([^<]+)<\/a>/g;
+
+    let match;
+    let resultCount = 0;
+    while ((match = resultRegex.exec(html)) !== null && resultCount < count) {
+      results.push({
+        url: match[1],
+        title: match[2].trim(),
+        description: match[3].trim()
+      });
+      resultCount++;
+    }
+
+    console.log(`Found ${results.length} results for: ${query}`);
+    return results;
+  } catch (error) {
+    console.error(`Search error for "${query}":`, error);
+    return [];
+  }
+}
+
+function formatSearchResults(results: SearchResult[]): string {
+  if (results.length === 0) {
+    return "No specific results found in search.";
+  }
+
+  return results
+    .map((r, i) => `${i + 1}. ${r.title}\n   ${r.description}\n   Source: ${r.url}`)
+    .join('\n\n');
 }
 
 function generateDemoScore(project: Project) {
@@ -147,7 +207,49 @@ async function scoreWithAI(project: Project, prompt: string, model: string, apiK
   const amount = project.totalamt;
   const domain = extractDomain(project);
 
-  console.log(`Scoring project with AI: ${project.project_name} in ${domain} domain`);
+  console.log(`Scoring project: ${project.project_name} (${domain} in ${country})`);
+
+  // Perform comprehensive web searches
+  console.log('Conducting web research...');
+
+  const searches = [
+    {
+      name: 'Emerging Technology',
+      query: `${domain} ${country} emerging technology AI blockchain IoT digital transformation 2024 2025`
+    },
+    {
+      name: 'Innovation Ecosystem',
+      query: `${country} ${domain} innovation challenge hackathon startup accelerator ecosystem`
+    },
+    {
+      name: 'Future Trends',
+      query: `${domain} future trends 2030 disruption transformation ${country} forecast`
+    },
+    {
+      name: 'Technology Applications',
+      query: `${domain} technology applications ${country} case studies success stories`
+    },
+    {
+      name: 'World Bank Innovation',
+      query: `World Bank ${domain} innovation lab technology ${country}`
+    }
+  ];
+
+  const searchResults: Record<string, SearchResult[]> = {};
+
+  for (const search of searches) {
+    const results = await performWebSearch(search.query, 8);
+    searchResults[search.name] = results;
+    // Small delay to avoid rate limiting
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+
+  // Build enriched prompt with actual search results
+  const searchContext = Object.entries(searchResults)
+    .map(([name, results]) => {
+      return `### ${name} Search Results\n${formatSearchResults(results)}`;
+    })
+    .join('\n\n');
 
   let enrichedPrompt = prompt
     .replace(/\[\[project_name\]\]/g, project.project_name)
@@ -155,45 +257,39 @@ async function scoreWithAI(project: Project, prompt: string, model: string, apiK
     .replace(/\[\[amount\]\]/g, amount)
     .replace(/\[\[domain\]\]/g, domain);
 
-  const searchInstructions = `
-IMPORTANT: Before scoring, you MUST conduct web searches for the following:
+  const webResearchSection = `
+=== WEB RESEARCH FINDINGS ===
 
-1. Search for: "${domain} emerging technology innovation AI blockchain IoT digital transformation"
-2. Search for: "${domain} future trends 2030 disruption transformation ${country}"
-3. Search for: "${domain} innovation challenge hackathon startup ecosystem ${country}"
+I conducted comprehensive web searches to inform this analysis. Below are the actual search results:
 
-Use the search results to provide specific, evidence-based scoring with real examples of:
-- Specific technologies being deployed in this domain
-- Named companies, startups, or initiatives
-- Actual innovation challenges or hackathons
-- Concrete disruptions and trends with sources
-- Real ecosystem players and accelerators
+${searchContext}
 
-Your analysis must be grounded in actual search findings, not generic knowledge.
+=== END WEB RESEARCH ===
+
+IMPORTANT: Base your scoring EXCLUSIVELY on the web research findings above. Reference specific:
+- Named technologies, companies, and initiatives found in the search results
+- Concrete examples of innovation challenges, hackathons, or ecosystem activities
+- Actual trends and disruptions mentioned in the sources
+- Real case studies and applications
+- Include source URLs where relevant
+
+If search results are limited, acknowledge this and provide a conservative score.
+
 `;
 
-  enrichedPrompt = searchInstructions + "\n\n" + enrichedPrompt;
+  enrichedPrompt = webResearchSection + "\n\n" + enrichedPrompt;
+
+  console.log(`Calling AI model: ${model}`);
 
   if (model.startsWith('gpt')) {
     const messages: any[] = [{ role: 'user', content: enrichedPrompt }];
 
-    // Use gpt-4o-search-preview for web search, otherwise use specified model
-    let actualModel = model;
     const requestBody: any = {
-      model: actualModel,
+      model: model,
       messages,
-      temperature: 0.7,
-      max_tokens: 3000
+      temperature: 0.5,
+      max_tokens: 4000
     };
-
-    // If model is gpt-4o or similar, switch to search preview model for web search
-    if (model.includes('gpt-4o') || model === 'gpt-4-turbo-preview' || model === 'gpt-4') {
-      actualModel = 'gpt-4o-search-preview-2025-03-11';
-      requestBody.model = actualModel;
-      // Add web_search_options to enable search
-      requestBody.web_search_options = {};
-      console.log(`Using ${actualModel} with web search enabled`);
-    }
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -229,7 +325,8 @@ Your analysis must be grounded in actual search findings, not generic knowledge.
       },
       body: JSON.stringify({
         model,
-        max_tokens: 4000,
+        max_tokens: 4096,
+        temperature: 0.5,
         messages: [{ role: 'user', content: enrichedPrompt }]
       })
     });
@@ -264,8 +361,10 @@ Deno.serve(async (req: Request) => {
     for (const project of projects) {
       try {
         if (model === 'demo' || !apiKey) {
+          console.log(`Using demo mode for project: ${project.id}`);
           results.push(generateDemoScore(project));
         } else {
+          console.log(`Scoring with AI for project: ${project.id}`);
           results.push(await scoreWithAI(project, prompt, model, apiKey));
         }
       } catch (error: any) {
