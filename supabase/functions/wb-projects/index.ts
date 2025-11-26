@@ -15,57 +15,71 @@ Deno.serve(async (req: Request) => {
 
   try {
     const url = new URL(req.url);
-    const params = new URLSearchParams();
-    
-    params.set('format', 'json');
-    params.set('fl', 'id,project_name,countryname,countryshortname,regionname,status,projectstatusdisplay,totalamt,sector1,mjsector1Name,theme1,mjtheme_namecode,boardapprovaldate,approvalfy,url');
-    
+
+    const page = url.searchParams.get('page') || '1';
+    const pageSize = url.searchParams.get('pageSize') || '50';
+    const offset = ((parseInt(page) - 1) * parseInt(pageSize)).toString();
+
+    let wbUrl = `${WB_API_URL}?format=json&rows=${pageSize}&os=${offset}`;
+    wbUrl += '&fl=id,project_name,countryname,countryshortname,regionname,status,projectstatusdisplay,totalamt,sector1,mjsector1Name,theme1,mjtheme_namecode,boardapprovaldate,approvalfy,url';
+    wbUrl += '&srt=boardapprovaldate+desc';
+
+    console.log('Fetching from World Bank API:', wbUrl);
+
+    const response = await fetch(wbUrl);
+
+    if (!response.ok) {
+      throw new Error(`World Bank API returned ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    let projectsArray = data.projects ? Object.values(data.projects) : [];
+
     const regions = url.searchParams.get('regions');
     if (regions && regions !== 'All') {
-      params.set('qterm', `regionname:"${regions}"`);
+      projectsArray = projectsArray.filter((p: any) => p.regionname === regions);
     }
-    
+
     const statuses = url.searchParams.get('statuses');
     if (statuses) {
       const statusList = statuses.split(',');
-      const statusQuery = statusList.map(s => `projectstatusdisplay:"${s}"`).join(' OR ');
-      const existing = params.get('qterm');
-      params.set('qterm', existing ? `${existing} AND (${statusQuery})` : `(${statusQuery})`);
+      projectsArray = projectsArray.filter((p: any) =>
+        statusList.includes(p.projectstatusdisplay)
+      );
     }
-    
+
     const yearFrom = url.searchParams.get('yearFrom');
     const yearTo = url.searchParams.get('yearTo');
     if (yearFrom && yearTo) {
-      params.set('appr_yr', `${yearFrom}:${yearTo}`);
+      const fromYear = parseInt(yearFrom);
+      const toYear = parseInt(yearTo);
+      projectsArray = projectsArray.filter((p: any) => {
+        if (!p.approvalfy) return false;
+        const year = parseInt(p.approvalfy);
+        return year >= fromYear && year <= toYear;
+      });
     }
-    
+
     const keyword = url.searchParams.get('keyword');
     if (keyword) {
-      const existing = params.get('qterm');
-      params.set('qterm', existing ? `${existing} AND ${keyword}` : keyword);
+      const searchTerm = keyword.toLowerCase();
+      projectsArray = projectsArray.filter((p: any) =>
+        (p.project_name && p.project_name.toLowerCase().includes(searchTerm)) ||
+        (p.countryname && JSON.stringify(p.countryname).toLowerCase().includes(searchTerm))
+      );
     }
-    
-    const page = url.searchParams.get('page') || '1';
-    const pageSize = url.searchParams.get('pageSize') || '50';
-    params.set('rows', pageSize);
-    params.set('os', ((parseInt(page) - 1) * parseInt(pageSize)).toString());
-    params.set('srt', 'boardapprovaldate desc');
-    
-    const wbUrl = `${WB_API_URL}?${params}`;
-    const response = await fetch(wbUrl);
-    const data = await response.json();
-
-    const projectsArray = data.projects ? Object.values(data.projects) : [];
 
     return new Response(
       JSON.stringify({
-        total: data.total || '0',
+        total: projectsArray.length,
         projects: projectsArray,
         mock: false
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error: any) {
+    console.error('Edge function error:', error);
     return new Response(
       JSON.stringify({ error: error.message }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
