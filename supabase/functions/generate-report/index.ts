@@ -52,32 +52,6 @@ function generateReportHTML(projects: any[], generatedDate: string): string {
     return '#6B7280';
   };
 
-  const getDimensionIcon = (dimension: string) => {
-    const icons: Record<string, string> = {
-      'emerging_tech': '⚡',
-      'foresight': '🔮',
-      'collective_intelligence': '🤝'
-    };
-    return icons[dimension] || '📊';
-  };
-
-  const getPrimaryDimension = (score: any) => {
-    if (!score) return { key: 'unknown', label: 'Not Scored' };
-    const tech = score.emerging_tech?.score || 0;
-    const foresight = score.foresight?.score || 0;
-    const collective = score.collective_intelligence?.score || 0;
-
-    if (tech >= foresight && tech >= collective) return { key: 'emerging_tech', label: 'Emerging Technology' };
-    if (foresight >= collective) return { key: 'foresight', label: 'Strategic Foresight' };
-    return { key: 'collective_intelligence', label: 'Collective Intelligence' };
-  };
-
-  const totalFinancing = projects.reduce((sum: number, p: any) =>
-    sum + parseInt((p.totalamt || '0').replace(/,/g, ''), 10), 0
-  );
-
-  const highPriorityCount = projects.filter((p: any) => (p.score?.overall_score || 0) >= 7).length;
-
   const getConfidenceBadge = (confidence: string) => {
     const badges: Record<string, string> = {
       'high': '<span style="background: #D1FAE5; color: #065F46; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600;">High Confidence</span>',
@@ -95,6 +69,142 @@ function generateReportHTML(projects: any[], generatedDate: string): string {
     };
     return badges[quality] || badges['medium'];
   };
+
+  const totalFinancing = projects.reduce((sum: number, p: any) =>
+    sum + parseInt((p.totalamt || '0').replace(/,/g, ''), 10), 0
+  );
+
+  const highPriorityCount = projects.filter((p: any) => (p.score?.overall_score || 0) >= 7).length;
+
+  const projectPages = projects.map((p: any, i: number) => {
+    const country = Array.isArray(p.countryname) ? p.countryname[0] : p.countryname || 'N/A';
+    const score = p.score || {};
+    const overall = score.overall_score || 0;
+    const techScore = score.emerging_tech?.score || 0;
+    const foresightScore = score.foresight?.score || 0;
+    const collectiveScore = score.collective_intelligence?.score || 0;
+
+    let infoSection = '';
+    if (score.confidence_level || score.research_quality) {
+      let rows = '';
+      if (score.research_quality) {
+        rows += `<div class="info-row"><span class="info-label">Research Quality:</span>${getResearchQualityBadge(score.research_quality)}</div>`;
+      }
+      if (score.confidence_level) {
+        rows += `<div class="info-row"><span class="info-label">Confidence Level:</span>${getConfidenceBadge(score.confidence_level)}</div>`;
+      }
+      if (score.relevance?.country_context) {
+        rows += `<div class="info-row"><span class="info-label">Country Context:</span><span style="font-size:13px">${score.relevance.country_context}</span></div>`;
+      }
+      infoSection = `<div class="info-section">${rows}</div>`;
+    }
+
+    let techContent = '';
+    if (score.emerging_tech?.evidence) {
+      techContent += `<div class="evidence-text">${score.emerging_tech.evidence}</div>`;
+    }
+    if (score.emerging_tech?.technologies?.length > 0) {
+      const techList = score.emerging_tech.technologies.map((t: string) =>
+        `<div class="finding-item"><span class="finding-bullet">→</span> ${t}</div>`
+      ).join('');
+      techContent += `<div style="margin-bottom:12px"><strong style="font-size:13px;color:var(--text-secondary)">Technologies Identified:</strong><div class="findings-list">${techList}</div></div>`;
+    }
+    if (score.emerging_tech?.key_players?.length > 0) {
+      const playersList = score.emerging_tech.key_players.map((k: string) =>
+        `<div class="finding-item"><span class="finding-bullet">→</span> ${k}</div>`
+      ).join('');
+      techContent += `<div><strong style="font-size:13px;color:var(--text-secondary)">Key Players:</strong><div class="findings-list">${playersList}</div></div>`;
+    }
+
+    let foresightContent = '';
+    if (score.foresight?.evidence) {
+      foresightContent += `<div class="evidence-text">${score.foresight.evidence}</div>`;
+    }
+    if (score.foresight?.disruptions?.length > 0) {
+      const disruptionsList = score.foresight.disruptions.map((d: string) =>
+        `<div class="finding-item"><span class="finding-bullet">→</span> ${d}</div>`
+      ).join('');
+      foresightContent += `<div style="margin-bottom:12px"><strong style="font-size:13px;color:var(--text-secondary)">Anticipated Disruptions:</strong><div class="findings-list">${disruptionsList}</div></div>`;
+    }
+    if (score.foresight?.strategic_risks?.length > 0) {
+      const risksList = score.foresight.strategic_risks.map((r: string) =>
+        `<div class="finding-item"><span class="finding-bullet">→</span> ${r}</div>`
+      ).join('');
+      foresightContent += `<div><strong style="font-size:13px;color:var(--text-secondary)">Strategic Risks:</strong><div class="findings-list">${risksList}</div></div>`;
+    }
+    if (score.foresight?.horizon) {
+      foresightContent += `<div style="margin-top:10px;font-size:13px;color:var(--text-secondary)"><strong>Time Horizon:</strong> ${score.foresight.horizon}</div>`;
+    }
+
+    let collectiveContent = '';
+    if (score.collective_intelligence?.evidence) {
+      collectiveContent += `<div class="evidence-text">${score.collective_intelligence.evidence}</div>`;
+    }
+    if (score.collective_intelligence?.examples?.length > 0) {
+      const examplesList = score.collective_intelligence.examples.map((e: string) =>
+        `<div class="finding-item"><span class="finding-bullet">→</span> ${e}</div>`
+      ).join('');
+      collectiveContent += `<div style="margin-bottom:12px"><strong style="font-size:13px;color:var(--text-secondary)">Ecosystem Examples:</strong><div class="findings-list">${examplesList}</div></div>`;
+    }
+    if (score.collective_intelligence?.stakeholders?.length > 0) {
+      const stakeholdersList = score.collective_intelligence.stakeholders.map((s: string) =>
+        `<span class="stakeholder-tag">${s}</span>`
+      ).join('');
+      collectiveContent += `<div class="stakeholders-section"><div class="stakeholders-title">🎯 Identified Stakeholders</div><div class="stakeholder-list">${stakeholdersList}</div></div>`;
+    }
+
+    let opportunitiesSection = '';
+    if (score.top_opportunities?.length > 0) {
+      const oppCards = score.top_opportunities.map((opp: any, j: number) => {
+        const dimLabel = opp.dimension === 'emerging_tech' ? 'Technology' : opp.dimension === 'foresight' ? 'Foresight' : 'Collective Intelligence';
+        let rationale = '';
+        if (opp.rationale) {
+          rationale = `<div class="opportunity-rationale">${opp.rationale}</div>`;
+        }
+        let partners = '';
+        if (opp.potential_partners?.length > 0) {
+          const partnerTags = opp.potential_partners.map((partner: string) =>
+            `<span class="partner-tag">${partner}</span>`
+          ).join('');
+          partners = `<div class="partners-list">${partnerTags}</div>`;
+        }
+        return `<div class="opportunity-card"><div class="opportunity-header"><div class="opportunity-number">${j+1}</div><div class="opportunity-text">${opp.opportunity}</div></div><div class="opportunity-meta"><span><strong>Approach:</strong> ${opp.approach}</span><span><strong>Dimension:</strong> ${dimLabel}</span></div>${rationale}${partners}</div>`;
+      }).join('');
+      opportunitiesSection = `<div class="opportunities-section"><div class="opportunities-title">🎯 Recommended Engagement Opportunities</div>${oppCards}</div>`;
+    }
+
+    let insightSection = '';
+    if (score.key_insight) {
+      insightSection = `<div class="key-insight"><strong>Key Insight:</strong> ${score.key_insight}</div>`;
+    }
+
+    return `
+    <div class="project-page">
+      <div class="project-header">
+        <div><div class="project-rank">Project #${i+1} of ${projects.length}</div><h2 class="project-name">${p.project_name}</h2><div class="project-meta"><span>📍 ${country}</span><span>💰 ${formatAmount(p.totalamt)}</span><span>🏷️ ${p.id}</span></div></div>
+        <div style="text-align:center"><div class="score-circle" style="background:${getScoreColor(overall)}">${overall}</div><div class="score-label">Overall Score</div></div>
+      </div>
+      ${infoSection}
+      <div class="research-section">
+        <div class="research-title">🔍 Research-Based Analysis</div>
+        <div class="research-subsection">
+          <div class="subsection-header"><span class="subsection-title">⚡ Emerging Technology</span><span class="subsection-score" style="color:${getScoreColor(techScore)}">${techScore}/10</span></div>
+          ${techContent}
+        </div>
+        <div class="research-subsection">
+          <div class="subsection-header"><span class="subsection-title">🔮 Strategic Foresight</span><span class="subsection-score" style="color:${getScoreColor(foresightScore)}">${foresightScore}/10</span></div>
+          ${foresightContent}
+        </div>
+        <div class="research-subsection">
+          <div class="subsection-header"><span class="subsection-title">🤝 Collective Intelligence</span><span class="subsection-score" style="color:${getScoreColor(collectiveScore)}">${collectiveScore}/10</span></div>
+          ${collectiveContent}
+        </div>
+      </div>
+      ${opportunitiesSection}
+      ${insightSection}
+      <div class="page-footer"><span>World Bank ITS Innovation Labs · Research-Driven Analysis</span><span>Page ${i+2} of ${projects.length+2}</span></div>
+    </div>`;
+  }).join('');
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -127,51 +237,8 @@ function generateReportHTML(projects: any[], generatedDate: string): string {
       <div class="dimension-card"><div class="dimension-header"><span style="font-size:24px">🔮</span><span class="dimension-name">Strategic Foresight Research</span><span class="dimension-weight">35% weight</span></div><p class="dimension-description">Analyzes disruption trends, future scenarios, and strategic risks facing the domain. Identifies specific shifts and timeframes from industry forecasts and expert analysis.</p></div>
       <div class="dimension-card"><div class="dimension-header"><span style="font-size:24px">🤝</span><span class="dimension-name">Ecosystem Intelligence Research</span><span class="dimension-weight">30% weight</span></div><p class="dimension-description">Maps innovation ecosystem activity including named challenges, hackathons, accelerators, and stakeholder networks. Identifies potential partners and collaboration opportunities.</p></div>
     </div>
-    ${projects.map((p: any, i: number) => {
-      const country = Array.isArray(p.countryname) ? p.countryname[0] : p.countryname || 'N/A';
-      const score = p.score || {};
-      const overall = score.overall_score || 0;
-      const techScore = score.emerging_tech?.score || 0;
-      const foresightScore = score.foresight?.score || 0;
-      const collectiveScore = score.collective_intelligence?.score || 0;
-      return \`
-    <div class="project-page">
-      <div class="project-header">
-        <div><div class="project-rank">Project #\${i+1} of \${projects.length}</div><h2 class="project-name">\${p.project_name}</h2><div class="project-meta"><span>📍 \${country}</span><span>💰 \${formatAmount(p.totalamt)}</span><span>🏷️ \${p.id}</span></div></div>
-        <div style="text-align:center"><div class="score-circle" style="background:\${getScoreColor(overall)}">\${overall}</div><div class="score-label">Overall Score</div></div>
-      </div>
-      \${score.confidence_level || score.research_quality ? \`<div class="info-section">\${score.research_quality ? \`<div class="info-row"><span class="info-label">Research Quality:</span>\${getResearchQualityBadge(score.research_quality)}</div>\` : ''}\${score.confidence_level ? \`<div class="info-row"><span class="info-label">Confidence Level:</span>\${getConfidenceBadge(score.confidence_level)}</div>\` : ''}\${score.relevance?.country_context ? \`<div class="info-row"><span class="info-label">Country Context:</span><span style="font-size:13px">\${score.relevance.country_context}</span></div>\` : ''}</div>\` : ''}
-      <div class="research-section">
-        <div class="research-title">🔍 Research-Based Analysis</div>
-        <div class="research-subsection">
-          <div class="subsection-header"><span class="subsection-title">⚡ Emerging Technology</span><span class="subsection-score" style="color:\${getScoreColor(techScore)}">\${techScore}/10</span></div>
-          \${score.emerging_tech?.evidence ? \`<div class="evidence-text">\${score.emerging_tech.evidence}</div>\` : ''}
-          \${score.emerging_tech?.technologies?.length > 0 ? \`<div style="margin-bottom:12px"><strong style="font-size:13px;color:var(--text-secondary)">Technologies Identified:</strong><div class="findings-list">\${score.emerging_tech.technologies.map((t: string) => \`<div class="finding-item"><span class="finding-bullet">→</span> \${t}</div>\`).join('')}</div></div>\` : ''}
-          \${score.emerging_tech?.key_players?.length > 0 ? \`<div><strong style="font-size:13px;color:var(--text-secondary)">Key Players:</strong><div class="findings-list">\${score.emerging_tech.key_players.map((k: string) => \`<div class="finding-item"><span class="finding-bullet">→</span> \${k}</div>\`).join('')}</div></div>\` : ''}
-        </div>
-        <div class="research-subsection">
-          <div class="subsection-header"><span class="subsection-title">🔮 Strategic Foresight</span><span class="subsection-score" style="color:\${getScoreColor(foresightScore)}">\${foresightScore}/10</span></div>
-          \${score.foresight?.evidence ? \`<div class="evidence-text">\${score.foresight.evidence}</div>\` : ''}
-          \${score.foresight?.disruptions?.length > 0 ? \`<div style="margin-bottom:12px"><strong style="font-size:13px;color:var(--text-secondary)">Anticipated Disruptions:</strong><div class="findings-list">\${score.foresight.disruptions.map((d: string) => \`<div class="finding-item"><span class="finding-bullet">→</span> \${d}</div>\`).join('')}</div></div>\` : ''}
-          \${score.foresight?.strategic_risks?.length > 0 ? \`<div><strong style="font-size:13px;color:var(--text-secondary)">Strategic Risks:</strong><div class="findings-list">\${score.foresight.strategic_risks.map((r: string) => \`<div class="finding-item"><span class="finding-bullet">→</span> \${r}</div>\`).join('')}</div></div>\` : ''}
-          \${score.foresight?.horizon ? \`<div style="margin-top:10px;font-size:13px;color:var(--text-secondary)"><strong>Time Horizon:</strong> \${score.foresight.horizon}</div>\` : ''}
-        </div>
-        <div class="research-subsection">
-          <div class="subsection-header"><span class="subsection-title">🤝 Collective Intelligence</span><span class="subsection-score" style="color:\${getScoreColor(collectiveScore)}">\${collectiveScore}/10</span></div>
-          \${score.collective_intelligence?.evidence ? \`<div class="evidence-text">\${score.collective_intelligence.evidence}</div>\` : ''}
-          \${score.collective_intelligence?.examples?.length > 0 ? \`<div style="margin-bottom:12px"><strong style="font-size:13px;color:var(--text-secondary)">Ecosystem Examples:</strong><div class="findings-list">\${score.collective_intelligence.examples.map((e: string) => \`<div class="finding-item"><span class="finding-bullet">→</span> \${e}</div>\`).join('')}</div></div>\` : ''}
-          \${score.collective_intelligence?.stakeholders?.length > 0 ? \`<div class="stakeholders-section"><div class="stakeholders-title">🎯 Identified Stakeholders</div><div class="stakeholder-list">\${score.collective_intelligence.stakeholders.map((s: string) => \`<span class="stakeholder-tag">\${s}</span>\`).join('')}</div></div>\` : ''}
-        </div>
-      </div>
-      \${score.top_opportunities?.length > 0 ? \`<div class="opportunities-section"><div class="opportunities-title">🎯 Recommended Engagement Opportunities</div>\${score.top_opportunities.map((opp: any, j: number) => {
-          const dimLabel = opp.dimension === 'emerging_tech' ? 'Technology' : opp.dimension === 'foresight' ? 'Foresight' : 'Collective Intelligence';
-          return \\\`<div class="opportunity-card"><div class="opportunity-header"><div class="opportunity-number">\\\${j+1}</div><div class="opportunity-text">\\\${opp.opportunity}</div></div><div class="opportunity-meta"><span><strong>Approach:</strong> \\\${opp.approach}</span><span><strong>Dimension:</strong> \\\${dimLabel}</span></div>\\\${opp.rationale ? \\\`<div class="opportunity-rationale">\\\${opp.rationale}</div>\\\` : ''}\\\${opp.potential_partners?.length > 0 ? \\\`<div class="partners-list">\\\${opp.potential_partners.map((partner: string) => \\\`<span class="partner-tag">\\\${partner}</span>\\\`).join('')}</div>\\\` : ''}</div>\\\`;
-        }).join('')}</div>\` : ''}
-      \${score.key_insight ? \`<div class="key-insight"><strong>Key Insight:</strong> \${score.key_insight}</div>\` : ''}
-      <div class="page-footer"><span>World Bank ITS Innovation Labs · Research-Driven Analysis</span><span>Page \${i+2} of \${projects.length+2}</span></div>
-    </div>\`;
-    }).join('')}
+    ${projectPages}
   </div>
 </body>
-</html>\`;
+</html>`;
 }
