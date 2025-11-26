@@ -669,7 +669,12 @@ function App() {
 
     try {
       const startTime = Date.now();
-      const response = await fetch('/api/projects?page=1&pageSize=1');
+      const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/wb-projects?page=1&pageSize=1`;
+      const response = await fetch(apiUrl, {
+        headers: {
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
+        }
+      });
       const responseTime = `${Date.now() - startTime}ms`;
 
       if (!response.ok) {
