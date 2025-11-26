@@ -16,39 +16,31 @@ Deno.serve(async (req: Request) => {
   try {
     const url = new URL(req.url);
 
-    const page = url.searchParams.get('page') || '1';
-    const requestedPageSize = parseInt(url.searchParams.get('pageSize') || '50');
+    const page = parseInt(url.searchParams.get('page') || '1');
+    const pageSize = parseInt(url.searchParams.get('pageSize') || '50');
 
-    // Get filter parameters first to determine fetch size
+    // Get filter parameters
     const statuses = url.searchParams.get('statuses');
     const statusList = statuses ? statuses.split(',') : [];
-
-    // Fetch more rows to ensure we get enough projects after filtering
-    // Status distribution: Active ~63%, Pipeline ~31%, Dropped ~5.5%, Closed ~0.7%
-    // Default to 500 for mixed queries, 1000 if specifically looking for rare statuses
-    let fetchSize = 500;
-
-    // If ONLY looking for rare statuses, fetch even more
-    const onlyRareStatuses = statusList.length > 0 &&
-      statusList.every(s => s === 'Closed' || s === 'Dropped');
-
-    if (onlyRareStatuses) {
-      fetchSize = 1500;  // Fetch 1500 to get ~10 Closed and ~80 Dropped projects
-    }
-
-    const offset = ((parseInt(page) - 1) * fetchSize).toString();
-
-    let wbUrl = `${WB_API_URL}?format=json&rows=${fetchSize}&os=${offset}`;
-    wbUrl += '&fl=id,project_name,countryname,countryshortname,regionname,status,totalamt,sector1,mjsector1Name,theme1,mjtheme_namecode,boardapprovaldate,approvalfy,url';
-    wbUrl += '&srt=boardapprovaldate+desc';
-
     const regions = url.searchParams.get('regions');
     const keyword = url.searchParams.get('keyword');
     const yearFrom = url.searchParams.get('yearFrom');
     const yearTo = url.searchParams.get('yearTo');
 
+    // Calculate offset for WB API pagination
+    const offset = ((page - 1) * pageSize).toString();
+
+    let wbUrl = `${WB_API_URL}?format=json&rows=${pageSize}&os=${offset}`;
+    wbUrl += '&fl=id,project_name,countryname,countryshortname,regionname,status,totalamt,sector1,mjsector1Name,theme1,mjtheme_namecode,boardapprovaldate,approvalfy,url';
+    wbUrl += '&srt=boardapprovaldate+desc';
+
+    // Build qterm for keyword search if specified
+    if (keyword) {
+      wbUrl += `&qterm=${encodeURIComponent(keyword)}`;
+    }
+
     console.log('Fetching from World Bank API:', wbUrl);
-    console.log('Filters - Statuses:', statusList, 'Region:', regions, 'Keyword:', keyword);
+    console.log('Filters - Statuses:', statusList, 'Region:', regions, 'Year:', yearFrom, '-', yearTo);
 
     const response = await fetch(wbUrl);
 
@@ -58,8 +50,11 @@ Deno.serve(async (req: Request) => {
 
     const data = await response.json();
     let projectsArray = data.projects ? Object.values(data.projects) : [];
+    const totalFromAPI = parseInt(data.total || '0');
 
-    console.log(`Fetched ${projectsArray.length} projects from API`);
+    console.log(`Fetched ${projectsArray.length} projects from API (total in WB: ${totalFromAPI})`);
+
+    // Apply client-side filters (WB API doesn't support these filter types directly)
 
     // Apply status filter
     if (statusList.length > 0) {
@@ -90,29 +85,12 @@ Deno.serve(async (req: Request) => {
       console.log(`Year filter: ${beforeFilter} -> ${projectsArray.length} projects`);
     }
 
-    // Apply keyword filter
-    if (keyword) {
-      const searchTerm = keyword.toLowerCase();
-      const beforeFilter = projectsArray.length;
-      projectsArray = projectsArray.filter((p: any) =>
-        (p.project_name && p.project_name.toLowerCase().includes(searchTerm)) ||
-        (p.countryname && JSON.stringify(p.countryname).toLowerCase().includes(searchTerm))
-      );
-      console.log(`Keyword filter: ${beforeFilter} -> ${projectsArray.length} projects`);
-    }
-
-    // Paginate results
-    const totalFiltered = projectsArray.length;
-    const startIdx = 0;
-    const endIdx = Math.min(requestedPageSize, projectsArray.length);
-    const paginatedProjects = projectsArray.slice(startIdx, endIdx);
-
-    console.log(`Returning ${paginatedProjects.length} projects (total filtered: ${totalFiltered})`);
+    console.log(`Returning ${projectsArray.length} projects`);
 
     return new Response(
       JSON.stringify({
-        total: totalFiltered,
-        projects: paginatedProjects,
+        total: totalFromAPI,
+        projects: projectsArray,
         mock: false
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

@@ -177,18 +177,22 @@ Your analysis must be grounded in actual search findings, not generic knowledge.
   if (model.startsWith('gpt')) {
     const messages: any[] = [{ role: 'user', content: enrichedPrompt }];
 
+    // Use gpt-4o-search-preview for web search, otherwise use specified model
+    let actualModel = model;
     const requestBody: any = {
-      model,
+      model: actualModel,
       messages,
       temperature: 0.7,
       max_tokens: 3000
     };
 
-    // Enable web search for models that support it
-    if (model.includes('gpt-4o') || model.includes('gpt-4-turbo') || model === 'gpt-4') {
-      requestBody.tools = [{
-        type: 'web_search'
-      }];
+    // If model is gpt-4o or similar, switch to search preview model for web search
+    if (model.includes('gpt-4o') || model === 'gpt-4-turbo-preview' || model === 'gpt-4') {
+      actualModel = 'gpt-4o-search-preview-2025-03-11';
+      requestBody.model = actualModel;
+      // Add web_search_options to enable search
+      requestBody.web_search_options = {};
+      console.log(`Using ${actualModel} with web search enabled`);
     }
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {

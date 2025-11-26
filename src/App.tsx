@@ -282,7 +282,7 @@ function App() {
 
   const [filters, setFilters] = useState({
     region: 'All',
-    statuses: ['Active', 'Pipeline', 'Closed'],
+    statuses: ['Active', 'Pipeline'],
     yearFrom: '2020',
     yearTo: '2025',
     keyword: ''
@@ -666,10 +666,10 @@ function App() {
     const colors: Record<string, string> = {
       'Active': 'bg-green-100 text-green-800',
       'Pipeline': 'bg-blue-100 text-blue-800',
-      'Closed': 'bg-gray-100 text-gray-800'
+      'Dropped': 'bg-gray-100 text-gray-800'
     };
     return (
-      <span className={`px-2 py-1 text-xs rounded-full ${colors[status] || colors['Closed']}`}>
+      <span className={`px-2 py-1 text-xs rounded-full ${colors[status] || colors['Dropped']}`}>
         {status}
       </span>
     );
@@ -898,7 +898,7 @@ function App() {
 
           <div className="mb-4">
             <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
-            {['Active', 'Pipeline', 'Closed'].map(status => (
+            {['Active', 'Pipeline'].map(status => (
               <label key={status} className="flex items-center mb-2">
                 <input
                   type="checkbox"
