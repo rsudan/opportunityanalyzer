@@ -19,17 +19,28 @@ Deno.serve(async (req: Request) => {
     const page = url.searchParams.get('page') || '1';
     const requestedPageSize = parseInt(url.searchParams.get('pageSize') || '50');
 
-    // Fetch more rows than requested to account for filtering
-    const fetchSize = 200;
+    // Get filter parameters first to determine fetch size
+    const statuses = url.searchParams.get('statuses');
+    const statusList = statuses ? statuses.split(',') : [];
+
+    // Fetch more rows to ensure we get enough projects after filtering
+    // Status distribution: Active ~63%, Pipeline ~31%, Dropped ~5.5%, Closed ~0.7%
+    // Default to 500 for mixed queries, 1000 if specifically looking for rare statuses
+    let fetchSize = 500;
+
+    // If ONLY looking for rare statuses, fetch even more
+    const onlyRareStatuses = statusList.length > 0 &&
+      statusList.every(s => s === 'Closed' || s === 'Dropped');
+
+    if (onlyRareStatuses) {
+      fetchSize = 1500;  // Fetch 1500 to get ~10 Closed and ~80 Dropped projects
+    }
+
     const offset = ((parseInt(page) - 1) * fetchSize).toString();
 
     let wbUrl = `${WB_API_URL}?format=json&rows=${fetchSize}&os=${offset}`;
     wbUrl += '&fl=id,project_name,countryname,countryshortname,regionname,status,totalamt,sector1,mjsector1Name,theme1,mjtheme_namecode,boardapprovaldate,approvalfy,url';
     wbUrl += '&srt=boardapprovaldate+desc';
-
-    // Get filter parameters
-    const statuses = url.searchParams.get('statuses');
-    const statusList = statuses ? statuses.split(',') : [];
 
     const regions = url.searchParams.get('regions');
     const keyword = url.searchParams.get('keyword');
