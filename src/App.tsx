@@ -430,6 +430,8 @@ function App() {
 
       const data = await response.json();
       console.log('Projects data:', data);
+      console.log('Total from API:', data.total);
+      console.log('Projects array length:', data.projects?.length || 0);
       const loadedProjects = data.projects || [];
 
       // Debug: Log status distribution
@@ -439,6 +441,7 @@ function App() {
         statusCounts[status] = (statusCounts[status] || 0) + 1;
       });
       console.log('Status distribution in loaded projects:', statusCounts);
+      console.log('Active filters:', filters);
 
       setProjects(loadedProjects);
       setTotal(data.total || 0);
@@ -1078,6 +1081,11 @@ function App() {
 
           {loading ? (
             <div className="text-center py-12 text-gray-500">Loading...</div>
+          ) : projects.length === 0 ? (
+            <div className="bg-white rounded-lg shadow-md p-12 text-center">
+              <p className="text-gray-500 text-lg mb-2">No projects found</p>
+              <p className="text-gray-400 text-sm">Try adjusting your filters or click &quot;Clear Filters&quot;</p>
+            </div>
           ) : (
             <>
               <div className="bg-white rounded-lg shadow-md overflow-hidden">

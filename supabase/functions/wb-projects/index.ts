@@ -17,7 +17,7 @@ Deno.serve(async (req: Request) => {
     const url = new URL(req.url);
 
     const page = parseInt(url.searchParams.get('page') || '1');
-    const pageSize = parseInt(url.searchParams.get('pageSize') || '50');
+    const requestedPageSize = parseInt(url.searchParams.get('pageSize') || '50');
 
     // Get filter parameters
     const statuses = url.searchParams.get('statuses');
@@ -27,14 +27,16 @@ Deno.serve(async (req: Request) => {
     const yearFrom = url.searchParams.get('yearFrom');
     const yearTo = url.searchParams.get('yearTo');
 
-    // Calculate offset for WB API pagination
-    const offset = ((page - 1) * pageSize).toString();
+    // When client-side filtering is needed, fetch more records to ensure we have enough
+    const needsFiltering = statusList.length > 0 || (regions && regions !== 'All') || (yearFrom && yearTo);
+    const fetchSize = needsFiltering ? 200 : requestedPageSize;
+    const offset = ((page - 1) * fetchSize).toString();
 
-    let wbUrl = `${WB_API_URL}?format=json&rows=${pageSize}&os=${offset}`;
+    let wbUrl = `${WB_API_URL}?format=json&rows=${fetchSize}&os=${offset}`;
     wbUrl += '&fl=id,project_name,countryname,countryshortname,regionname,status,totalamt,sector1,mjsector1Name,theme1,mjtheme_namecode,boardapprovaldate,approvalfy,url';
     wbUrl += '&srt=boardapprovaldate+desc';
 
-    // Build qterm for keyword search if specified
+    // Use WB API keyword search if specified
     if (keyword) {
       wbUrl += `&qterm=${encodeURIComponent(keyword)}`;
     }
@@ -50,13 +52,10 @@ Deno.serve(async (req: Request) => {
 
     const data = await response.json();
     let projectsArray = data.projects ? Object.values(data.projects) : [];
-    const totalFromAPI = parseInt(data.total || '0');
 
-    console.log(`Fetched ${projectsArray.length} projects from API (total in WB: ${totalFromAPI})`);
+    console.log(`Fetched ${projectsArray.length} projects from WB API`);
 
-    // Apply client-side filters (WB API doesn't support these filter types directly)
-
-    // Apply status filter
+    // Apply client-side filters
     if (statusList.length > 0) {
       const beforeFilter = projectsArray.length;
       projectsArray = projectsArray.filter((p: any) =>
@@ -65,14 +64,12 @@ Deno.serve(async (req: Request) => {
       console.log(`Status filter: ${beforeFilter} -> ${projectsArray.length} projects`);
     }
 
-    // Apply region filter
     if (regions && regions !== 'All') {
       const beforeFilter = projectsArray.length;
       projectsArray = projectsArray.filter((p: any) => p.regionname === regions);
       console.log(`Region filter: ${beforeFilter} -> ${projectsArray.length} projects`);
     }
 
-    // Apply year filter
     if (yearFrom && yearTo) {
       const fromYear = parseInt(yearFrom);
       const toYear = parseInt(yearTo);
@@ -85,12 +82,18 @@ Deno.serve(async (req: Request) => {
       console.log(`Year filter: ${beforeFilter} -> ${projectsArray.length} projects`);
     }
 
-    console.log(`Returning ${projectsArray.length} projects`);
+    // Paginate the filtered results
+    const totalFiltered = projectsArray.length;
+    const startIdx = 0;
+    const endIdx = Math.min(requestedPageSize, projectsArray.length);
+    const paginatedProjects = projectsArray.slice(startIdx, endIdx);
+
+    console.log(`Returning ${paginatedProjects.length} projects (total filtered: ${totalFiltered})`);
 
     return new Response(
       JSON.stringify({
-        total: totalFromAPI,
-        projects: projectsArray,
+        total: totalFiltered,
+        projects: paginatedProjects,
         mock: false
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
