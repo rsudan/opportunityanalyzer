@@ -55,7 +55,6 @@ Deno.serve(async (req: Request) => {
     const response = await fetch(wbUrl);
     const data = await response.json();
 
-    // Convert projects object to array
     const projectsArray = data.projects ? Object.values(data.projects) : [];
 
     return new Response(

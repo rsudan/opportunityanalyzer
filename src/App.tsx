@@ -305,17 +305,30 @@ function App() {
       params.set('pageSize', '50');
 
       const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/wb-projects?${params}`;
+      console.log('Fetching projects from:', apiUrl);
+
       const response = await fetch(apiUrl, {
         headers: {
           'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
         }
       });
+
+      console.log('Response status:', response.status);
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
       const data = await response.json();
+      console.log('Projects data:', data);
       setProjects(data.projects || []);
       setTotal(data.total || 0);
       setMockMode(data.mock || false);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Search error:', error);
+      alert(`Failed to load projects: ${error.message}\n\nPlease check that the edge functions are deployed correctly.`);
+      setProjects([]);
+      setTotal(0);
     }
     setLoading(false);
   };
