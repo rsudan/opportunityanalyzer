@@ -311,10 +311,17 @@ function App() {
   const [apiTest, setApiTest] = useState<{ status: string; message: string; data?: any } | null>(null);
   const [testing, setTesting] = useState(false);
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
+  const [webSearchTest, setWebSearchTest] = useState<{ status: string; message: string; searchResults?: string } | null>(null);
+  const [testingWebSearch, setTestingWebSearch] = useState(false);
 
   useEffect(() => {
     loadSettings();
-    searchProjects();
+  }, []);
+
+  useEffect(() => {
+    if (page > 1) {
+      searchProjects();
+    }
   }, [page]);
 
   const loadSettings = async () => {
@@ -424,6 +431,15 @@ function App() {
       const data = await response.json();
       console.log('Projects data:', data);
       const loadedProjects = data.projects || [];
+
+      // Debug: Log status distribution
+      const statusCounts: Record<string, number> = {};
+      loadedProjects.forEach((p: any) => {
+        const status = p.status || 'NO_STATUS';
+        statusCounts[status] = (statusCounts[status] || 0) + 1;
+      });
+      console.log('Status distribution in loaded projects:', statusCounts);
+
       setProjects(loadedProjects);
       setTotal(data.total || 0);
       setMockMode(data.mock || false);
@@ -795,6 +811,65 @@ function App() {
     }
 
     setTestingAi(false);
+  };
+
+  const testWebSearch = async () => {
+    setTestingWebSearch(true);
+    setWebSearchTest(null);
+
+    if (!apiKeys.openai) {
+      setWebSearchTest({
+        status: 'error',
+        message: 'OpenAI API key required for web search test'
+      });
+      setTestingWebSearch(false);
+      return;
+    }
+
+    try {
+      const testQuery = 'What are the latest AI trends in agriculture 2025?';
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKeys.openai}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-search-preview-2025-03-11',
+          messages: [{
+            role: 'user',
+            content: `Search the web for: "${testQuery}"\n\nProvide 3 specific, recent findings with sources. Keep response under 150 words.`
+          }],
+          web_search_options: {},
+          max_tokens: 300
+        })
+      });
+
+      const data = await response.json();
+
+      if (data.error) {
+        throw new Error(data.error.message);
+      }
+
+      const searchResults = data.choices[0].message.content;
+      const hasRecentInfo = searchResults.toLowerCase().includes('2025') ||
+                           searchResults.toLowerCase().includes('2024');
+
+      setWebSearchTest({
+        status: hasRecentInfo ? 'success' : 'warning',
+        message: hasRecentInfo
+          ? 'Web search working! Found recent information from the web.'
+          : 'API responded but results may not include recent web search data.',
+        searchResults
+      });
+    } catch (error: any) {
+      setWebSearchTest({
+        status: 'error',
+        message: `Web search test failed: ${error.message}`
+      });
+    }
+
+    setTestingWebSearch(false);
   };
 
   const testWorldBankAPI = async () => {
@@ -1216,6 +1291,40 @@ function App() {
                           : 'bg-red-50 border border-red-200 text-red-800'
                       }`}>
                         {aiTest.message}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="mt-4 p-4 bg-blue-50 rounded border border-blue-200">
+                    <div className="flex justify-between items-start mb-2">
+                      <div className="flex-1">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Web Search Test</label>
+                        <p className="text-xs text-gray-600 mb-2">
+                          Test if OpenAI's gpt-4o-search-preview can access real-time web data
+                        </p>
+                      </div>
+                      <button
+                        onClick={testWebSearch}
+                        disabled={testingWebSearch || !apiKeys.openai}
+                        className="ml-2 bg-blue-600 text-white px-3 py-2 rounded hover:bg-blue-700 transition disabled:bg-gray-300 disabled:cursor-not-allowed text-sm whitespace-nowrap"
+                      >
+                        {testingWebSearch ? 'Searching...' : 'Test Web Search'}
+                      </button>
+                    </div>
+                    {webSearchTest && (
+                      <div className={`mt-2 p-3 rounded text-xs ${
+                        webSearchTest.status === 'success'
+                          ? 'bg-green-50 border border-green-200 text-green-800'
+                          : webSearchTest.status === 'warning'
+                          ? 'bg-yellow-50 border border-yellow-200 text-yellow-800'
+                          : 'bg-red-50 border border-red-200 text-red-800'
+                      }`}>
+                        <div className="font-semibold mb-1">{webSearchTest.message}</div>
+                        {webSearchTest.searchResults && (
+                          <div className="mt-2 text-xs bg-white bg-opacity-50 p-2 rounded max-h-32 overflow-y-auto">
+                            {webSearchTest.searchResults}
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
