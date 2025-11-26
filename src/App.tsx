@@ -283,8 +283,8 @@ function App() {
   const [filters, setFilters] = useState({
     region: 'All',
     statuses: ['Active', 'Pipeline'],
-    yearFrom: '2020',
-    yearTo: '2025',
+    yearFrom: '',
+    yearTo: '',
     keyword: ''
   });
   const [projects, setProjects] = useState<Project[]>([]);
@@ -314,7 +314,6 @@ function App() {
 
   useEffect(() => {
     loadSettings();
-    loadScores();
     searchProjects();
   }, [page]);
 
@@ -373,11 +372,14 @@ function App() {
     }
   };
 
-  const loadScores = async () => {
-    if (!supabase) return;
-    const { data } = await supabase.from('project_scores').select('*');
+  const loadScores = async (projectIds: string[]) => {
+    if (!supabase || projectIds.length === 0) return;
+    const { data } = await supabase
+      .from('project_scores')
+      .select('*')
+      .in('project_id', projectIds);
     if (data) {
-      const scoresMap: Record<string, Score> = {};
+      const scoresMap: Record<string, Score> = { ...scores };
       data.forEach((score: any) => {
         if (score.score_data) {
           scoresMap[score.project_id] = score.score_data;
@@ -394,12 +396,10 @@ function App() {
       if (filters.region !== 'All') params.set('regions', filters.region);
       if (filters.statuses.length > 0) params.set('statuses', filters.statuses.join(','));
 
-      // Only apply year filters if Pipeline is not the only status selected
-      // Pipeline projects don't have approval years yet
-      const isPipelineOnly = filters.statuses.length === 1 && filters.statuses[0] === 'Pipeline';
-      if (!isPipelineOnly) {
-        if (filters.yearFrom) params.set('yearFrom', filters.yearFrom);
-        if (filters.yearTo) params.set('yearTo', filters.yearTo);
+      // Apply year filters only if both are set
+      if (filters.yearFrom && filters.yearTo) {
+        params.set('yearFrom', filters.yearFrom);
+        params.set('yearTo', filters.yearTo);
       }
 
       if (filters.keyword) params.set('keyword', filters.keyword);
@@ -423,9 +423,16 @@ function App() {
 
       const data = await response.json();
       console.log('Projects data:', data);
-      setProjects(data.projects || []);
+      const loadedProjects = data.projects || [];
+      setProjects(loadedProjects);
       setTotal(data.total || 0);
       setMockMode(data.mock || false);
+
+      // Load scores only for currently visible projects
+      if (loadedProjects.length > 0) {
+        const projectIds = loadedProjects.map((p: any) => p.id);
+        await loadScores(projectIds);
+      }
     } catch (error: any) {
       console.error('Search error:', error);
       alert(`Failed to load projects: ${error.message}\n\nPlease check that the edge functions are deployed correctly.`);
@@ -444,8 +451,8 @@ function App() {
     setFilters({
       region: 'All',
       statuses: ['Active', 'Pipeline'],
-      yearFrom: '2020',
-      yearTo: '2025',
+      yearFrom: '',
+      yearTo: '',
       keyword: ''
     });
     setPage(1);
@@ -921,19 +928,17 @@ function App() {
             <div className="flex gap-2">
               <input
                 type="number"
-                placeholder="From"
+                placeholder="From (e.g. 2020)"
                 value={filters.yearFrom}
                 onChange={(e) => setFilters({ ...filters, yearFrom: e.target.value })}
-                disabled={filters.statuses.length === 1 && filters.statuses[0] === 'Pipeline'}
-                className="w-1/2 border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-[#009FDA] focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                className="w-1/2 border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-[#009FDA] focus:border-transparent"
               />
               <input
                 type="number"
-                placeholder="To"
+                placeholder="To (e.g. 2025)"
                 value={filters.yearTo}
                 onChange={(e) => setFilters({ ...filters, yearTo: e.target.value })}
-                disabled={filters.statuses.length === 1 && filters.statuses[0] === 'Pipeline'}
-                className="w-1/2 border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-[#009FDA] focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                className="w-1/2 border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-[#009FDA] focus:border-transparent"
               />
             </div>
           </div>
