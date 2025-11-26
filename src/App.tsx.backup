@@ -1,0 +1,1107 @@
+import { useState, useEffect } from 'react';
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(
+  import.meta.env.VITE_SUPABASE_URL,
+  import.meta.env.VITE_SUPABASE_ANON_KEY
+);
+
+const DEFAULT_SCORING_PROMPT = "You are an expert analyst identifying technology opportunities for the World Bank's ITS Innovation Labs team.\n\nITS Innovation Labs specializes in:\n- Digital transformation and e-government solutions\n- Data analytics and business intelligence\n- AI/ML applications for development\n- Cloud infrastructure and modernization\n- Cybersecurity solutions\n- Geospatial and mapping technologies\n\nAnalyze this World Bank project:\n\nPROJECT:\n- ID: {{project_id}}\n- Name: {{project_name}}\n- Country: {{country}}\n- Region: {{region}}\n- Sector: {{sector}}\n- Theme: {{theme}}\n- Amount: ${{amount}}\n- Status: {{status}}\n\nRESPOND WITH VALID JSON ONLY (no markdown):\n{\n  \"relevance_score\": <number 1-10>,\n  \"opportunity_signals\": [\"<signal1>\", \"<signal2>\"],\n  \"opportunity_type\": \"<implementation|advisory|platform|data|infrastructure>\",\n  \"estimated_engagement_size\": \"<small|medium|large>\",\n  \"brief_justification\": \"<2 sentences>\"\n}";
+
+const DEFAULT_REPORT_PROMPT = "Based on the analyzed projects below, create an opportunity report.\n\nPROJECTS:\n{{projects_json}}\n\nGenerate:\n1. EXECUTIVE SUMMARY (50 words)\n2. TOP 5 OPPORTUNITIES with project name, score, country, and why it matters\n3. KEY THEMES across projects\n\nKeep under 400 words. No markdown code blocks.";
+
+const REGIONS = [
+  'All',
+  'Africa',
+  'East Asia and Pacific',
+  'Europe and Central Asia',
+  'Latin America and Caribbean',
+  'Middle East and North Africa',
+  'South Asia'
+];
+
+interface Project {
+  id: string;
+  project_name: string;
+  countryname: string | string[];
+  regionname: string;
+  status: string;
+  projectstatusdisplay: string;
+  totalamt: string;
+  sector1?: { Name: string };
+  mjsector1Name?: string;
+  theme1?: { Name: string };
+}
+
+interface Score {
+  relevance_score: number;
+  opportunity_signals: string[];
+  opportunity_type: string;
+  estimated_engagement_size: string;
+  brief_justification: string;
+}
+
+function App() {
+  const [filters, setFilters] = useState({
+    region: 'All',
+    statuses: ['Active', 'Pipeline'],
+    yearFrom: '2020',
+    yearTo: '2025',
+    keyword: ''
+  });
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [loading, setLoading] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [scores, setScores] = useState<Record<string, Score>>({});
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [apiKeys, setApiKeys] = useState({ openai: '', anthropic: '' });
+  const [activeModel, setActiveModel] = useState('demo');
+  const [scoringPrompt, setScoringPrompt] = useState(DEFAULT_SCORING_PROMPT);
+  const [reportPrompt, setReportPrompt] = useState(DEFAULT_REPORT_PROMPT);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [report, setReport] = useState('');
+  const [mockMode, setMockMode] = useState(false);
+  const [scoring, setScoring] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [apiTest, setApiTest] = useState<{ status: string; message: string; data?: any } | null>(null);
+  const [testing, setTesting] = useState(false);
+
+  useEffect(() => {
+    loadScores();
+    searchProjects();
+  }, [page]);
+
+  const loadScores = async () => {
+    const { data } = await supabase.from('project_scores').select('*');
+    if (data) {
+      const scoresMap: Record<string, Score> = {};
+      data.forEach((score: any) => {
+        scoresMap[score.project_id] = {
+          relevance_score: score.relevance_score,
+          opportunity_signals: score.opportunity_signals || [],
+          opportunity_type: score.opportunity_type,
+          estimated_engagement_size: score.estimated_engagement_size,
+          brief_justification: score.brief_justification
+        };
+      });
+      setScores(scoresMap);
+    }
+  };
+
+  const searchProjects = async () => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (filters.region !== 'All') params.set('regions', filters.region);
+      if (filters.statuses.length > 0) params.set('statuses', filters.statuses.join(','));
+      if (filters.yearFrom) params.set('yearFrom', filters.yearFrom);
+      if (filters.yearTo) params.set('yearTo', filters.yearTo);
+      if (filters.keyword) params.set('keyword', filters.keyword);
+      params.set('page', page.toString());
+      params.set('pageSize', '50');
+
+      const response = await fetch(`/api/projects?${params}`);
+      const data = await response.json();
+      setProjects(data.projects || []);
+      setTotal(data.total || 0);
+      setMockMode(data.mock || false);
+    } catch (error) {
+      console.error('Search error:', error);
+    }
+    setLoading(false);
+  };
+
+  const handleSearch = () => {
+    setPage(1);
+    searchProjects();
+  };
+
+  const handleClear = () => {
+    setFilters({
+      region: 'All',
+      statuses: ['Active', 'Pipeline'],
+      yearFrom: '2020',
+      yearTo: '2025',
+      keyword: ''
+    });
+    setPage(1);
+  };
+
+  const toggleSelect = (id: string) => {
+    const newSelected = new Set(selected);
+    if (newSelected.has(id)) {
+      newSelected.delete(id);
+    } else {
+      newSelected.add(id);
+    }
+    setSelected(newSelected);
+  };
+
+  const toggleSelectAll = () => {
+    if (selected.size === projects.length) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(projects.map(p => p.id)));
+    }
+  };
+
+  const scoreSelected = async () => {
+    if (selected.size === 0) {
+      alert('Please select at least one project');
+      return;
+    }
+
+    setScoring(true);
+    try {
+      const selectedProjects = projects.filter(p => selected.has(p.id));
+      const response = await fetch('/api/score', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projects: selectedProjects,
+          prompt: scoringPrompt,
+          model: activeModel,
+          apiKey: activeModel.startsWith('gpt') ? apiKeys.openai : apiKeys.anthropic
+        })
+      });
+      const data = await response.json();
+
+      const newScores = { ...scores };
+      for (const result of data.results) {
+        if (result.success) {
+          newScores[result.projectId] = result;
+
+          const project = selectedProjects.find(p => p.id === result.projectId);
+          if (project) {
+            await supabase.from('project_scores').upsert({
+              project_id: result.projectId,
+              project_name: project.project_name,
+              country: Array.isArray(project.countryname) ? project.countryname.join(', ') : project.countryname,
+              region: project.regionname,
+              sector: project.sector1?.Name || project.mjsector1Name,
+              amount: project.totalamt,
+              status: project.projectstatusdisplay || project.status,
+              relevance_score: result.relevance_score,
+              opportunity_signals: result.opportunity_signals,
+              opportunity_type: result.opportunity_type,
+              estimated_engagement_size: result.estimated_engagement_size,
+              brief_justification: result.brief_justification,
+              updated_at: new Date().toISOString()
+            });
+          }
+        }
+      }
+      setScores(newScores);
+
+      const failed = data.results.filter((r: any) => !r.success).length;
+      if (failed > 0) {
+        alert(`Scored ${data.results.length - failed} projects successfully. ${failed} failed.`);
+      }
+    } catch (error: any) {
+      alert('Scoring failed: ' + error.message);
+    }
+    setScoring(false);
+  };
+
+  const generateReport = async () => {
+    const scoredProjects = projects.filter(p => scores[p.id]).map(p => ({
+      ...p,
+      score: scores[p.id]
+    }));
+
+    if (scoredProjects.length === 0) {
+      alert('Please score at least one project first');
+      return;
+    }
+
+    setGenerating(true);
+    try {
+      const response = await fetch('/api/report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projects: scoredProjects,
+          prompt: reportPrompt,
+          model: activeModel,
+          apiKey: activeModel.startsWith('gpt') ? apiKeys.openai : apiKeys.anthropic
+        })
+      });
+      const data = await response.json();
+      setReport(data.report);
+      setReportOpen(true);
+    } catch (error: any) {
+      alert('Report generation failed: ' + error.message);
+    }
+    setGenerating(false);
+  };
+
+  const formatAmount = (amt: string) => {
+    const num = parseInt((amt || '0').replace(/,/g, ''), 10);
+    if (num >= 1000000000) return `$${(num / 1000000000).toFixed(1)}B`;
+    if (num >= 1000000) return `$${(num / 1000000).toFixed(0)}M`;
+    return 'TBD';
+  };
+
+  const formatCountry = (country: string | string[]) => {
+    return Array.isArray(country) ? country.join(', ') : country || 'Unknown';
+  };
+
+  const StatusBadge = ({ status }: { status: string }) => {
+    const colors: Record<string, string> = {
+      'Active': 'bg-green-100 text-green-800',
+      'Pipeline': 'bg-blue-100 text-blue-800',
+      'Closed': 'bg-gray-100 text-gray-800'
+    };
+    return (
+      <span className={`px-2 py-1 text-xs rounded-full ${colors[status] || colors['Closed']}`}>
+        {status}
+      </span>
+    );
+  };
+
+  const ScoreBadge = ({ score }: { score?: Score }) => {
+    if (!score) return <span className="text-gray-400">—</span>;
+    const value = score.relevance_score;
+    const color = value >= 8 ? 'bg-green-500' : value >= 5 ? 'bg-yellow-500' : 'bg-red-500';
+    return (
+      <span className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-sm ${color}`}>
+        {value}
+      </span>
+    );
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <header className="bg-[#002244] text-white p-4 shadow-lg">
+        <div className="max-w-[1600px] mx-auto flex justify-between items-center">
+          <div>
+            <h1 className="text-2xl font-bold">WB Project Opportunity Analyzer</h1>
+            <p className="text-sm text-gray-300">ITS Innovation Labs</p>
+          </div>
+          <button
+            onClick={() => setSettingsOpen(true)}
+            className="p-2 hover:bg-[#003366] rounded transition"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <div className="flex max-w-[1600px] mx-auto">
+        <aside className="w-72 bg-white p-6 shadow-md min-h-screen">
+          <h2 className="text-lg font-semibold mb-4 text-gray-700">Filters</h2>
+
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">Region</label>
+            <select
+              value={filters.region}
+              onChange={(e) => setFilters({ ...filters, region: e.target.value })}
+              className="w-full border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-[#009FDA] focus:border-transparent"
+            >
+              {REGIONS.map(r => <option key={r} value={r}>{r}</option>)}
+            </select>
+          </div>
+
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
+            {['Active', 'Pipeline', 'Closed'].map(status => (
+              <label key={status} className="flex items-center mb-2">
+                <input
+                  type="checkbox"
+                  checked={filters.statuses.includes(status)}
+                  onChange={(e) => {
+                    const newStatuses = e.target.checked
+                      ? [...filters.statuses, status]
+                      : filters.statuses.filter(s => s !== status);
+                    setFilters({ ...filters, statuses: newStatuses });
+                  }}
+                  className="mr-2"
+                />
+                <span className="text-sm">{status}</span>
+              </label>
+            ))}
+          </div>
+
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">Year Range</label>
+            <div className="flex gap-2">
+              <input
+                type="number"
+                placeholder="From"
+                value={filters.yearFrom}
+                onChange={(e) => setFilters({ ...filters, yearFrom: e.target.value })}
+                className="w-1/2 border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-[#009FDA] focus:border-transparent"
+              />
+              <input
+                type="number"
+                placeholder="To"
+                value={filters.yearTo}
+                onChange={(e) => setFilters({ ...filters, yearTo: e.target.value })}
+                className="w-1/2 border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-[#009FDA] focus:border-transparent"
+              />
+            </div>
+          </div>
+
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">Keyword</label>
+            <input
+              type="text"
+              value={filters.keyword}
+              onChange={(e) => setFilters({ ...filters, keyword: e.target.value })}
+              placeholder="e.g. digital"
+              className="w-full border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-[#009FDA] focus:border-transparent"
+            />
+          </div>
+
+          <div className="flex gap-2">
+            <button
+              onClick={handleSearch}
+              className="flex-1 bg-[#009FDA] text-white px-4 py-2 rounded hover:bg-[#0088cc] transition"
+            >
+              Search
+            </button>
+            <button
+              onClick={handleClear}
+              className="flex-1 bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400 transition"
+            >
+              Clear
+            </button>
+          </div>
+        </aside>
+
+        <main className="flex-1 p-6">
+          {mockMode && (
+            <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded mb-4">
+              Using demo data (World Bank API unavailable)
+            </div>
+          )}
+
+          <div className="bg-white rounded-lg shadow-md p-4 mb-4">
+            <div className="flex justify-between items-center">
+              <span className="text-gray-600">
+                Found <span className="font-semibold">{total}</span> projects
+              </span>
+              <div className="flex gap-2">
+                <button
+                  onClick={scoreSelected}
+                  disabled={selected.size === 0 || scoring}
+                  className="bg-[#28A745] text-white px-4 py-2 rounded hover:bg-green-600 transition disabled:bg-gray-300 disabled:cursor-not-allowed"
+                >
+                  {scoring ? 'Scoring...' : 'Score Selected'}
+                </button>
+                <button
+                  onClick={generateReport}
+                  disabled={Object.keys(scores).length === 0 || generating}
+                  className="bg-[#002244] text-white px-4 py-2 rounded hover:bg-[#003366] transition disabled:bg-gray-300 disabled:cursor-not-allowed"
+                >
+                  {generating ? 'Generating...' : 'Generate Report'}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {loading ? (
+            <div className="text-center py-12 text-gray-500">Loading...</div>
+          ) : (
+            <>
+              <div className="bg-white rounded-lg shadow-md overflow-hidden">
+                <table className="w-full">
+                  <thead className="bg-gray-100 border-b">
+                    <tr>
+                      <th className="p-3 text-left">
+                        <input
+                          type="checkbox"
+                          checked={selected.size === projects.length && projects.length > 0}
+                          onChange={toggleSelectAll}
+                        />
+                      </th>
+                      <th className="p-3 text-left text-sm font-semibold text-gray-700">Project</th>
+                      <th className="p-3 text-left text-sm font-semibold text-gray-700">Country</th>
+                      <th className="p-3 text-left text-sm font-semibold text-gray-700">Region</th>
+                      <th className="p-3 text-left text-sm font-semibold text-gray-700">Sector</th>
+                      <th className="p-3 text-left text-sm font-semibold text-gray-700">Amount</th>
+                      <th className="p-3 text-left text-sm font-semibold text-gray-700">Status</th>
+                      <th className="p-3 text-left text-sm font-semibold text-gray-700">Score</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {projects.map((project) => (
+                      <tr key={project.id} className="border-b hover:bg-gray-50">
+                        <td className="p-3">
+                          <input
+                            type="checkbox"
+                            checked={selected.has(project.id)}
+                            onChange={() => toggleSelect(project.id)}
+                          />
+                        </td>
+                        <td className="p-3">
+                          <a
+                            href={`https://projects.worldbank.org/en/projects-operations/project-detail/${project.id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[#009FDA] hover:underline font-medium"
+                          >
+                            {project.project_name || 'Unnamed Project'}
+                          </a>
+                          <div className="text-xs text-gray-500">{project.id}</div>
+                        </td>
+                        <td className="p-3 text-sm">{formatCountry(project.countryname)}</td>
+                        <td className="p-3 text-sm">{project.regionname}</td>
+                        <td className="p-3 text-sm">{project.sector1?.Name || project.mjsector1Name || 'N/A'}</td>
+                        <td className="p-3 text-sm font-semibold">{formatAmount(project.totalamt)}</td>
+                        <td className="p-3">
+                          <StatusBadge status={project.projectstatusdisplay || project.status} />
+                        </td>
+                        <td className="p-3">
+                          <ScoreBadge score={scores[project.id]} />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {total > 50 && (
+                <div className="mt-4 flex justify-center gap-2">
+                  <button
+                    onClick={() => setPage(p => Math.max(1, p - 1))}
+                    disabled={page === 1}
+                    className="px-4 py-2 bg-white border rounded hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    Previous
+                  </button>
+                  <span className="px-4 py-2">
+                    Page {page} of {Math.ceil(total / 50)}
+                  </span>
+                  <button
+                    onClick={() => setPage(p => p + 1)}
+                    disabled={page >= Math.ceil(total / 50)}
+                    className="px-4 py-2 bg-white border rounded hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    Next
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+        </main>
+      </div>
+
+      {settingsOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b flex justify-between items-center">
+              <h2 className="text-xl font-bold text-gray-800">Settings</h2>
+              <button
+                onClick={() => setSettingsOpen(false)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              <div>
+                <h3 className="text-lg font-semibold mb-3 text-gray-700">External APIs</h3>
+                <div className="mb-4 p-4 bg-gray-50 rounded border border-gray-200">
+                  <div className="flex justify-between items-center mb-2">
+                    <div>
+                      <h4 className="font-semibold text-gray-800">World Bank API</h4>
+                      <p className="text-sm text-gray-600">https://search.worldbank.org/api/v2/projects</p>
+                    </div>
+                    <button
+                      onClick={testWorldBankAPI}
+                      disabled={testing}
+                      className="bg-[#009FDA] text-white px-4 py-2 rounded hover:bg-[#0088cc] transition disabled:bg-gray-300 disabled:cursor-not-allowed text-sm"
+                    >
+                      {testing ? 'Testing...' : 'Test API'}
+                    </button>
+                  </div>
+                  {apiTest && (
+                    <div className={`mt-3 p-3 rounded text-sm ${
+                      apiTest.status === 'success'
+                        ? 'bg-green-50 border border-green-200 text-green-800'
+                        : 'bg-red-50 border border-red-200 text-red-800'
+                    }`}>
+                      <div className="font-semibold mb-1">
+                        {apiTest.status === 'success' ? '✓ API Available' : '✗ API Unavailable'}
+                      </div>
+                      <div>{apiTest.message}</div>
+                      {apiTest.data && (
+                        <div className="mt-2 text-xs font-mono bg-white bg-opacity-50 p-2 rounded">
+                          <div>Total Projects: {apiTest.data.total || 0}</div>
+                          <div>Response Time: {apiTest.data.responseTime || 'N/A'}</div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <h3 className="text-lg font-semibold mb-3 text-gray-700">AI Model API Keys</h3>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">OpenAI API Key</label>
+                    <input
+                      type="password"
+                      value={apiKeys.openai}
+                      onChange={(e) => setApiKeys({ ...apiKeys, openai: e.target.value })}
+                      placeholder="sk-..."
+                      className="w-full border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-[#009FDA] focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Anthropic API Key</label>
+                    <input
+                      type="password"
+                      value={apiKeys.anthropic}
+                      onChange={(e) => setApiKeys({ ...apiKeys, anthropic: e.target.value })}
+                      placeholder="sk-ant-..."
+                      className="w-full border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-[#009FDA] focus:border-transparent"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <h3 className="text-lg font-semibold mb-3 text-gray-700">Model Selection</h3>
+                <select
+                  value={activeModel}
+                  onChange={(e) => setActiveModel(e.target.value)}
+                  className="w-full border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-[#009FDA] focus:border-transparent"
+                >
+                  <option value="demo">Demo Mode (no key needed)</option>
+                  <option value="gpt-4o">GPT-4o</option>
+                  <option value="gpt-4-turbo">GPT-4 Turbo</option>
+                  <option value="claude-sonnet-4-20250514">Claude Sonnet 4</option>
+                </select>
+              </div>
+
+              <div>
+                <h3 className="text-lg font-semibold mb-3 text-gray-700">Scoring Prompt</h3>
+                <textarea
+                  value={scoringPrompt}
+                  onChange={(e) => setScoringPrompt(e.target.value)}
+                  rows={10}
+                  className="w-full border border-gray-300 rounded px-3 py-2 font-mono text-sm focus:ring-2 focus:ring-[#009FDA] focus:border-transparent"
+                />
+                <button
+                  onClick={() => setScoringPrompt(DEFAULT_SCORING_PROMPT)}
+                  className="mt-2 text-sm text-[#009FDA] hover:underline"
+                >
+                  Reset to Default
+                </button>
+              </div>
+
+              <div>
+                <h3 className="text-lg font-semibold mb-3 text-gray-700">Report Prompt</h3>
+                <textarea
+                  value={reportPrompt}
+                  onChange={(e) => setReportPrompt(e.target.value)}
+                  rows={8}
+                  className="w-full border border-gray-300 rounded px-3 py-2 font-mono text-sm focus:ring-2 focus:ring-[#009FDA] focus:border-transparent"
+                />
+                <button
+                  onClick={() => setReportPrompt(DEFAULT_REPORT_PROMPT)}
+                  className="mt-2 text-sm text-[#009FDA] hover:underline"
+                >
+                  Reset to Default
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6 border-t bg-gray-50">
+              <button
+                onClick={() => setSettingsOpen(false)}
+                className="w-full bg-[#002244] text-white px-4 py-2 rounded hover:bg-[#003366] transition"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {reportOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b flex justify-between items-center">
+              <h2 className="text-xl font-bold text-gray-800">Opportunity Report</h2>
+              <button
+                onClick={() => setReportOpen(false)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="p-6">
+              <pre className="whitespace-pre-wrap font-sans text-gray-800 leading-relaxed">
+                {report}
+              </pre>
+            </div>
+
+            <div className="p-6 border-t bg-gray-50">
+              <button
+                onClick={() => setReportOpen(false)}
+                className="w-full bg-[#002244] text-white px-4 py-2 rounded hover:bg-[#003366] transition"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+  const testWorldBankAPI = async () => {
+    setTesting(true);
+    setApiTest(null);
+
+    try {
+      const startTime = Date.now();
+      const response = await fetch('/api/projects?page=1&pageSize=1');
+      const responseTime = `${Date.now() - startTime}ms`;
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+
+      if (data.mock) {
+        setApiTest({
+          status: 'warning',
+          message: 'World Bank API is not responding. Using demo data instead.',
+          data: {
+            total: data.total || 0,
+            responseTime
+          }
+        });
+      } else {
+        setApiTest({
+          status: 'success',
+          message: 'Successfully connected to World Bank API.',
+          data: {
+            total: data.total || 0,
+            responseTime
+          }
+        });
+      }
+    } catch (error: any) {
+      setApiTest({
+        status: 'error',
+        message: `Failed to connect: ${error.message}`
+      });
+    }
+
+    setTesting(false);
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <header className="bg-[#002244] text-white p-4 shadow-lg">
+        <div className="max-w-[1600px] mx-auto flex justify-between items-center">
+          <div>
+            <h1 className="text-2xl font-bold">WB Project Opportunity Analyzer</h1>
+            <p className="text-sm text-gray-300">ITS Innovation Labs</p>
+          </div>
+          <button
+            onClick={() => setSettingsOpen(true)}
+            className="p-2 hover:bg-[#003366] rounded transition"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <div className="flex max-w-[1600px] mx-auto">
+        <aside className="w-72 bg-white p-6 shadow-md min-h-screen">
+          <h2 className="text-lg font-semibold mb-4 text-gray-700">Filters</h2>
+
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">Region</label>
+            <select
+              value={filters.region}
+              onChange={(e) => setFilters({ ...filters, region: e.target.value })}
+              className="w-full border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-[#009FDA] focus:border-transparent"
+            >
+              {REGIONS.map(r => <option key={r} value={r}>{r}</option>)}
+            </select>
+          </div>
+
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
+            {['Active', 'Pipeline', 'Closed'].map(status => (
+              <label key={status} className="flex items-center mb-2">
+                <input
+                  type="checkbox"
+                  checked={filters.statuses.includes(status)}
+                  onChange={(e) => {
+                    const newStatuses = e.target.checked
+                      ? [...filters.statuses, status]
+                      : filters.statuses.filter(s => s !== status);
+                    setFilters({ ...filters, statuses: newStatuses });
+                  }}
+                  className="mr-2"
+                />
+                <span className="text-sm">{status}</span>
+              </label>
+            ))}
+          </div>
+
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">Year Range</label>
+            <div className="flex gap-2">
+              <input
+                type="number"
+                placeholder="From"
+                value={filters.yearFrom}
+                onChange={(e) => setFilters({ ...filters, yearFrom: e.target.value })}
+                className="w-1/2 border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-[#009FDA] focus:border-transparent"
+              />
+              <input
+                type="number"
+                placeholder="To"
+                value={filters.yearTo}
+                onChange={(e) => setFilters({ ...filters, yearTo: e.target.value })}
+                className="w-1/2 border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-[#009FDA] focus:border-transparent"
+              />
+            </div>
+          </div>
+
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">Keyword</label>
+            <input
+              type="text"
+              value={filters.keyword}
+              onChange={(e) => setFilters({ ...filters, keyword: e.target.value })}
+              placeholder="e.g. digital"
+              className="w-full border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-[#009FDA] focus:border-transparent"
+            />
+          </div>
+
+          <div className="flex gap-2">
+            <button
+              onClick={handleSearch}
+              className="flex-1 bg-[#009FDA] text-white px-4 py-2 rounded hover:bg-[#0088cc] transition"
+            >
+              Search
+            </button>
+            <button
+              onClick={handleClear}
+              className="flex-1 bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400 transition"
+            >
+              Clear
+            </button>
+          </div>
+        </aside>
+
+        <main className="flex-1 p-6">
+          {mockMode && (
+            <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded mb-4">
+              Using demo data (World Bank API unavailable)
+            </div>
+          )}
+
+          <div className="bg-white rounded-lg shadow-md p-4 mb-4">
+            <div className="flex justify-between items-center">
+              <span className="text-gray-600">
+                Found <span className="font-semibold">{total}</span> projects
+              </span>
+              <div className="flex gap-2">
+                <button
+                  onClick={scoreSelected}
+                  disabled={selected.size === 0 || scoring}
+                  className="bg-[#28A745] text-white px-4 py-2 rounded hover:bg-green-600 transition disabled:bg-gray-300 disabled:cursor-not-allowed"
+                >
+                  {scoring ? 'Scoring...' : 'Score Selected'}
+                </button>
+                <button
+                  onClick={generateReport}
+                  disabled={Object.keys(scores).length === 0 || generating}
+                  className="bg-[#002244] text-white px-4 py-2 rounded hover:bg-[#003366] transition disabled:bg-gray-300 disabled:cursor-not-allowed"
+                >
+                  {generating ? 'Generating...' : 'Generate Report'}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {loading ? (
+            <div className="text-center py-12 text-gray-500">Loading...</div>
+          ) : (
+            <>
+              <div className="bg-white rounded-lg shadow-md overflow-hidden">
+                <table className="w-full">
+                  <thead className="bg-gray-100 border-b">
+                    <tr>
+                      <th className="p-3 text-left">
+                        <input
+                          type="checkbox"
+                          checked={selected.size === projects.length && projects.length > 0}
+                          onChange={toggleSelectAll}
+                        />
+                      </th>
+                      <th className="p-3 text-left text-sm font-semibold text-gray-700">Project</th>
+                      <th className="p-3 text-left text-sm font-semibold text-gray-700">Country</th>
+                      <th className="p-3 text-left text-sm font-semibold text-gray-700">Region</th>
+                      <th className="p-3 text-left text-sm font-semibold text-gray-700">Sector</th>
+                      <th className="p-3 text-left text-sm font-semibold text-gray-700">Amount</th>
+                      <th className="p-3 text-left text-sm font-semibold text-gray-700">Status</th>
+                      <th className="p-3 text-left text-sm font-semibold text-gray-700">Score</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {projects.map((project) => (
+                      <tr key={project.id} className="border-b hover:bg-gray-50">
+                        <td className="p-3">
+                          <input
+                            type="checkbox"
+                            checked={selected.has(project.id)}
+                            onChange={() => toggleSelect(project.id)}
+                          />
+                        </td>
+                        <td className="p-3">
+                          <a
+                            href={`https://projects.worldbank.org/en/projects-operations/project-detail/${project.id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[#009FDA] hover:underline font-medium"
+                          >
+                            {project.project_name || 'Unnamed Project'}
+                          </a>
+                          <div className="text-xs text-gray-500">{project.id}</div>
+                        </td>
+                        <td className="p-3 text-sm">{formatCountry(project.countryname)}</td>
+                        <td className="p-3 text-sm">{project.regionname}</td>
+                        <td className="p-3 text-sm">{project.sector1?.Name || project.mjsector1Name || 'N/A'}</td>
+                        <td className="p-3 text-sm font-semibold">{formatAmount(project.totalamt)}</td>
+                        <td className="p-3">
+                          <StatusBadge status={project.projectstatusdisplay || project.status} />
+                        </td>
+                        <td className="p-3">
+                          <ScoreBadge score={scores[project.id]} />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {total > 50 && (
+                <div className="mt-4 flex justify-center gap-2">
+                  <button
+                    onClick={() => setPage(p => Math.max(1, p - 1))}
+                    disabled={page === 1}
+                    className="px-4 py-2 bg-white border rounded hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    Previous
+                  </button>
+                  <span className="px-4 py-2">
+                    Page {page} of {Math.ceil(total / 50)}
+                  </span>
+                  <button
+                    onClick={() => setPage(p => p + 1)}
+                    disabled={page >= Math.ceil(total / 50)}
+                    className="px-4 py-2 bg-white border rounded hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    Next
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+        </main>
+      </div>
+
+      {settingsOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b flex justify-between items-center">
+              <h2 className="text-xl font-bold text-gray-800">Settings</h2>
+              <button
+                onClick={() => setSettingsOpen(false)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              <div>
+                <h3 className="text-lg font-semibold mb-3 text-gray-700">External APIs</h3>
+                <div className="mb-4 p-4 bg-gray-50 rounded border border-gray-200">
+                  <div className="flex justify-between items-center mb-2">
+                    <div>
+                      <h4 className="font-semibold text-gray-800">World Bank API</h4>
+                      <p className="text-sm text-gray-600">https://search.worldbank.org/api/v2/projects</p>
+                    </div>
+                    <button
+                      onClick={testWorldBankAPI}
+                      disabled={testing}
+                      className="bg-[#009FDA] text-white px-4 py-2 rounded hover:bg-[#0088cc] transition disabled:bg-gray-300 disabled:cursor-not-allowed text-sm"
+                    >
+                      {testing ? 'Testing...' : 'Test API'}
+                    </button>
+                  </div>
+                  {apiTest && (
+                    <div className={`mt-3 p-3 rounded text-sm ${
+                      apiTest.status === 'success'
+                        ? 'bg-green-50 border border-green-200 text-green-800'
+                        : 'bg-red-50 border border-red-200 text-red-800'
+                    }`}>
+                      <div className="font-semibold mb-1">
+                        {apiTest.status === 'success' ? '✓ API Available' : '✗ API Unavailable'}
+                      </div>
+                      <div>{apiTest.message}</div>
+                      {apiTest.data && (
+                        <div className="mt-2 text-xs font-mono bg-white bg-opacity-50 p-2 rounded">
+                          <div>Total Projects: {apiTest.data.total || 0}</div>
+                          <div>Response Time: {apiTest.data.responseTime || 'N/A'}</div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <h3 className="text-lg font-semibold mb-3 text-gray-700">AI Model API Keys</h3>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">OpenAI API Key</label>
+                    <input
+                      type="password"
+                      value={apiKeys.openai}
+                      onChange={(e) => setApiKeys({ ...apiKeys, openai: e.target.value })}
+                      placeholder="sk-..."
+                      className="w-full border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-[#009FDA] focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Anthropic API Key</label>
+                    <input
+                      type="password"
+                      value={apiKeys.anthropic}
+                      onChange={(e) => setApiKeys({ ...apiKeys, anthropic: e.target.value })}
+                      placeholder="sk-ant-..."
+                      className="w-full border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-[#009FDA] focus:border-transparent"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <h3 className="text-lg font-semibold mb-3 text-gray-700">Model Selection</h3>
+                <select
+                  value={activeModel}
+                  onChange={(e) => setActiveModel(e.target.value)}
+                  className="w-full border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-[#009FDA] focus:border-transparent"
+                >
+                  <option value="demo">Demo Mode (no key needed)</option>
+                  <option value="gpt-4o">GPT-4o</option>
+                  <option value="gpt-4-turbo">GPT-4 Turbo</option>
+                  <option value="claude-sonnet-4-20250514">Claude Sonnet 4</option>
+                </select>
+              </div>
+
+              <div>
+                <h3 className="text-lg font-semibold mb-3 text-gray-700">Scoring Prompt</h3>
+                <textarea
+                  value={scoringPrompt}
+                  onChange={(e) => setScoringPrompt(e.target.value)}
+                  rows={10}
+                  className="w-full border border-gray-300 rounded px-3 py-2 font-mono text-sm focus:ring-2 focus:ring-[#009FDA] focus:border-transparent"
+                />
+                <button
+                  onClick={() => setScoringPrompt(DEFAULT_SCORING_PROMPT)}
+                  className="mt-2 text-sm text-[#009FDA] hover:underline"
+                >
+                  Reset to Default
+                </button>
+              </div>
+
+              <div>
+                <h3 className="text-lg font-semibold mb-3 text-gray-700">Report Prompt</h3>
+                <textarea
+                  value={reportPrompt}
+                  onChange={(e) => setReportPrompt(e.target.value)}
+                  rows={8}
+                  className="w-full border border-gray-300 rounded px-3 py-2 font-mono text-sm focus:ring-2 focus:ring-[#009FDA] focus:border-transparent"
+                />
+                <button
+                  onClick={() => setReportPrompt(DEFAULT_REPORT_PROMPT)}
+                  className="mt-2 text-sm text-[#009FDA] hover:underline"
+                >
+                  Reset to Default
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6 border-t bg-gray-50">
+              <button
+                onClick={() => setSettingsOpen(false)}
+                className="w-full bg-[#002244] text-white px-4 py-2 rounded hover:bg-[#003366] transition"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {reportOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b flex justify-between items-center">
+              <h2 className="text-xl font-bold text-gray-800">Opportunity Report</h2>
+              <button
+                onClick={() => setReportOpen(false)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="p-6">
+              <pre className="whitespace-pre-wrap font-sans text-gray-800 leading-relaxed">
+                {report}
+              </pre>
+            </div>
+
+            <div className="p-6 border-t bg-gray-50">
+              <button
+                onClick={() => setReportOpen(false)}
+                className="w-full bg-[#002244] text-white px-4 py-2 rounded hover:bg-[#003366] transition"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default App;

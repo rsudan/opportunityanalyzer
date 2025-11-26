@@ -1,0 +1,767 @@
+Add the following feature to the WB Project Opportunity Analyzer app:
+
+## FEATURE: ONE-PAGE PROJECT REPORT GENERATION
+
+Add a "Generate Detailed Report" button that creates an elegantly formatted one-page report for each selected scored project, ordered by score (highest to lowest). The report should be downloadable as a styled HTML file that can be printed or saved as PDF.
+
+---
+
+## BACKEND ROUTE
+
+Add this endpoint:
+
+```javascript
+// POST /api/detailed-report - Generate one-page report for selected projects
+app.post('/api/detailed-report', async (req, res) => {
+  const { projects } = req.body;
+
+  // Sort projects by score (highest first)
+  const sortedProjects = [...projects]
+    .filter(p => p.score) // Only include scored projects
+    .sort((a, b) => (b.score.overall_score || 0) - (a.score.overall_score || 0));
+
+  if (sortedProjects.length === 0) {
+    return res.status(400).json({ error: 'No scored projects to report on' });
+  }
+
+  // Generate HTML report
+  const html = generateDetailedReport(sortedProjects);
+
+  res.json({ html });
+});
+
+function generateDetailedReport(projects) {
+  const reportDate = new Date().toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  });
+
+  const projectPages = projects.map((project, index) => generateProjectPage(project, index + 1)).join('\n\n');
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ITS Innovation Lab - Project Opportunity Analysis</title>
+  <style>
+    @media print {
+      @page {
+        size: A4;
+        margin: 15mm;
+      }
+      .page-break {
+        page-break-before: always;
+      }
+      .no-print {
+        display: none;
+      }
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+      line-height: 1.5;
+      color: #1f2937;
+      background: #f9fafb;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 210mm;
+      margin: 0 auto;
+      background: white;
+    }
+
+    .page {
+      background: white;
+      padding: 25mm 20mm;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      min-height: 277mm; /* A4 height minus margins */
+    }
+
+    .header {
+      border-bottom: 3px solid #002244;
+      padding-bottom: 15px;
+      margin-bottom: 20px;
+    }
+
+    .header-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 10px;
+    }
+
+    .logo-section {
+      flex: 1;
+    }
+
+    .org-name {
+      font-size: 11px;
+      color: #6b7280;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 2px;
+    }
+
+    .lab-name {
+      font-size: 16px;
+      font-weight: 700;
+      color: #002244;
+    }
+
+    .report-meta {
+      text-align: right;
+      font-size: 10px;
+      color: #6b7280;
+    }
+
+    .project-title-block {
+      margin-top: 10px;
+    }
+
+    .rank-badge {
+      display: inline-block;
+      background: #002244;
+      color: white;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .project-title {
+      font-size: 20px;
+      font-weight: 700;
+      color: #111827;
+      margin-bottom: 8px;
+      line-height: 1.3;
+    }
+
+    .project-meta {
+      display: flex;
+      gap: 20px;
+      font-size: 12px;
+      color: #6b7280;
+    }
+
+    .meta-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .meta-label {
+      font-weight: 600;
+    }
+
+    .score-overview {
+      background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+      border-left: 4px solid #009FDA;
+      padding: 18px;
+      margin: 20px 0;
+      border-radius: 8px;
+    }
+
+    .score-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .overall-score {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .score-circle {
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      font-weight: 700;
+      color: white;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+
+    .score-high { background: #22c55e; }
+    .score-medium { background: #eab308; }
+    .score-low { background: #9ca3af; }
+
+    .score-text {
+      font-size: 13px;
+    }
+
+    .score-label {
+      font-weight: 700;
+      color: #111827;
+      display: block;
+    }
+
+    .score-classification {
+      color: #6b7280;
+      font-size: 12px;
+    }
+
+    .dimension-scores {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-top: 12px;
+    }
+
+    .dimension-card {
+      background: white;
+      padding: 12px;
+      border-radius: 6px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+
+    .dimension-header {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+
+    .dimension-icon {
+      font-size: 18px;
+    }
+
+    .dimension-name {
+      font-size: 11px;
+      font-weight: 600;
+      color: #374151;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+
+    .dimension-score {
+      font-size: 20px;
+      font-weight: 700;
+      color: #111827;
+    }
+
+    .dimension-score-label {
+      font-size: 10px;
+      color: #9ca3af;
+    }
+
+    .section {
+      margin-bottom: 20px;
+    }
+
+    .section-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: #002244;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 10px;
+      padding-bottom: 5px;
+      border-bottom: 2px solid #e5e7eb;
+    }
+
+    .methodology-box {
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      padding: 14px;
+      border-radius: 6px;
+      font-size: 11px;
+      line-height: 1.6;
+    }
+
+    .methodology-box p {
+      margin-bottom: 8px;
+    }
+
+    .methodology-box strong {
+      color: #111827;
+    }
+
+    .findings-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
+    }
+
+    .finding-card {
+      border-left: 3px solid #009FDA;
+      padding: 12px;
+      background: #f9fafb;
+      border-radius: 4px;
+    }
+
+    .finding-card.tech { border-left-color: #f59e0b; }
+    .finding-card.foresight { border-left-color: #8b5cf6; }
+    .finding-card.collective { border-left-color: #10b981; }
+
+    .finding-title {
+      font-size: 12px;
+      font-weight: 700;
+      color: #111827;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .finding-content {
+      font-size: 11px;
+      color: #4b5563;
+      line-height: 1.5;
+    }
+
+    .finding-content ul {
+      margin-left: 16px;
+      margin-top: 4px;
+    }
+
+    .finding-content li {
+      margin-bottom: 3px;
+    }
+
+    .opportunities-list {
+      background: #fef3c7;
+      border: 1px solid #fbbf24;
+      border-radius: 6px;
+      padding: 14px;
+    }
+
+    .opportunity-item {
+      margin-bottom: 12px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid #fde68a;
+    }
+
+    .opportunity-item:last-child {
+      margin-bottom: 0;
+      padding-bottom: 0;
+      border-bottom: none;
+    }
+
+    .opportunity-title {
+      font-size: 12px;
+      font-weight: 700;
+      color: #111827;
+      margin-bottom: 4px;
+    }
+
+    .opportunity-meta {
+      font-size: 10px;
+      color: #92400e;
+      display: flex;
+      gap: 12px;
+      margin-bottom: 4px;
+    }
+
+    .opportunity-desc {
+      font-size: 11px;
+      color: #78350f;
+      line-height: 1.5;
+    }
+
+    .key-insight-box {
+      background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+      border: 2px solid #3b82f6;
+      padding: 14px;
+      border-radius: 8px;
+      margin-top: 16px;
+    }
+
+    .key-insight-label {
+      font-size: 10px;
+      font-weight: 700;
+      color: #1e40af;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+    }
+
+    .key-insight-text {
+      font-size: 12px;
+      color: #1e3a8a;
+      font-weight: 500;
+      line-height: 1.5;
+    }
+
+    .footer {
+      margin-top: 20px;
+      padding-top: 12px;
+      border-top: 1px solid #e5e7eb;
+      font-size: 9px;
+      color: #9ca3af;
+      text-align: center;
+    }
+
+    .download-button {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: #009FDA;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+      z-index: 1000;
+    }
+
+    .download-button:hover {
+      background: #0088cc;
+    }
+
+    @media screen and (max-width: 768px) {
+      body { padding: 10px; }
+      .page { padding: 15mm 10mm; }
+      .dimension-scores { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <button class="download-button no-print" onclick="window.print()">📥 Download as PDF</button>
+
+  <div class="container">
+    ${projectPages}
+  </div>
+
+  <script>
+    // Add page numbers after load
+    window.addEventListener('load', function() {
+      const pages = document.querySelectorAll('.page');
+      pages.forEach((page, index) => {
+        const pageNum = page.querySelector('.page-number');
+        if (pageNum) {
+          pageNum.textContent = \`Page \${index + 1} of \${pages.length}\`;
+        }
+      });
+    });
+  </script>
+</body>
+</html>`;
+}
+
+function generateProjectPage(project, rank) {
+  const score = project.score;
+  const overall = score.overall_score;
+
+  // Determine score class
+  const scoreClass = overall >= 7 ? 'score-high' : overall >= 5 ? 'score-medium' : 'score-low';
+  const classification = overall >= 7 ? 'High Priority' : overall >= 5 ? 'Strong Potential' : 'Moderate Fit';
+
+  // Format country
+  const country = Array.isArray(project.countryname)
+    ? project.countryname.join(', ')
+    : project.countryname || 'Unknown';
+
+  // Format amount
+  const amount = formatAmount(project.totalamt);
+
+  // Get dimension scores
+  const techScore = score.emerging_tech?.score || 0;
+  const foresightScore = score.foresight?.score || 0;
+  const collectiveScore = score.collective_intelligence?.score || 0;
+
+  // Get findings
+  const technologies = score.emerging_tech?.technologies?.join(', ') || 'Not identified';
+  const applications = score.emerging_tech?.applications?.join('; ') || 'N/A';
+  const techEvidence = score.emerging_tech?.evidence || '';
+
+  const disruptions = score.foresight?.disruptions?.join(', ') || 'Not identified';
+  const horizon = score.foresight?.horizon || 'unknown';
+  const foresightEvidence = score.foresight?.evidence || '';
+
+  const ecosystemActivity = score.collective_intelligence?.ecosystem_activity || 'unknown';
+  const examples = score.collective_intelligence?.examples?.join(', ') || 'Not identified';
+  const collectiveEvidence = score.collective_intelligence?.evidence || '';
+
+  // Get opportunities
+  const opportunities = score.top_opportunities || [];
+
+  // Get key insight
+  const keyInsight = score.key_insight || 'Comprehensive analysis required to identify specific opportunities.';
+
+  const reportDate = new Date().toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  });
+
+  return `<div class="page ${rank > 1 ? 'page-break' : ''}">
+  <div class="header">
+    <div class="header-top">
+      <div class="logo-section">
+        <div class="org-name">World Bank Group</div>
+        <div class="lab-name">ITS Innovation Labs</div>
+      </div>
+      <div class="report-meta">
+        <div>Innovation Opportunity Analysis</div>
+        <div>${reportDate}</div>
+        <div class="page-number"></div>
+      </div>
+    </div>
+
+    <div class="project-title-block">
+      <div class="rank-badge">Rank #${rank}</div>
+      <h1 class="project-title">${project.project_name}</h1>
+      <div class="project-meta">
+        <div class="meta-item">
+          <span class="meta-label">ID:</span> ${project.id}
+        </div>
+        <div class="meta-item">
+          <span class="meta-label">Country:</span> ${country}
+        </div>
+        <div class="meta-item">
+          <span class="meta-label">Region:</span> ${project.regionname}
+        </div>
+        <div class="meta-item">
+          <span class="meta-label">Amount:</span> $${amount}
+        </div>
+        <div class="meta-item">
+          <span class="meta-label">Status:</span> ${project.status}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="score-overview">
+    <div class="score-header">
+      <div class="overall-score">
+        <div class="score-circle ${scoreClass}">${overall}</div>
+        <div class="score-text">
+          <span class="score-label">Overall Opportunity Score</span>
+          <span class="score-classification">${classification}</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="dimension-scores">
+      <div class="dimension-card">
+        <div class="dimension-header">
+          <span class="dimension-icon">⚡</span>
+          <span class="dimension-name">Emerging Tech</span>
+        </div>
+        <div class="dimension-score">${techScore.toFixed(1)}<span class="dimension-score-label">/10</span></div>
+      </div>
+
+      <div class="dimension-card">
+        <div class="dimension-header">
+          <span class="dimension-icon">🔮</span>
+          <span class="dimension-name">Foresight</span>
+        </div>
+        <div class="dimension-score">${foresightScore.toFixed(1)}<span class="dimension-score-label">/10</span></div>
+      </div>
+
+      <div class="dimension-card">
+        <div class="dimension-header">
+          <span class="dimension-icon">🤝</span>
+          <span class="dimension-name">Collective Intel</span>
+        </div>
+        <div class="dimension-score">${collectiveScore.toFixed(1)}<span class="dimension-score-label">/10</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2 class="section-title">Scoring Methodology</h2>
+    <div class="methodology-box">
+      <p><strong>Research-Driven Approach:</strong> This score is derived from web research analyzing innovation activity in the project's domain (${extractDomain(project.project_name)}).</p>
+
+      <p><strong>Three Searches Conducted:</strong></p>
+      <ul>
+        <li><em>Emerging Technology:</em> What frontier technologies exist in this space?</li>
+        <li><em>Future Trends:</em> What disruptions should planners anticipate by 2030?</li>
+        <li><em>Ecosystem Activity:</em> Are there precedents for innovation challenges and collective approaches?</li>
+      </ul>
+
+      <p><strong>Score Calculation:</strong> Base Score = (Tech × 35%) + (Foresight × 35%) + (Collective × 30%), adjusted for project relevance and scale (larger projects = greater impact potential).</p>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2 class="section-title">Research Findings & Justification</h2>
+
+    <div class="findings-grid">
+      <div class="finding-card tech">
+        <div class="finding-title">
+          <span>⚡</span> Emerging Technology Landscape
+        </div>
+        <div class="finding-content">
+          <strong>Technologies Identified:</strong> ${technologies}
+          <br><strong>Potential Applications:</strong> ${applications}
+          <br><br><em>${techEvidence}</em>
+        </div>
+      </div>
+
+      <div class="finding-card foresight">
+        <div class="finding-title">
+          <span>🔮</span> Strategic Foresight Considerations
+        </div>
+        <div class="finding-content">
+          <strong>Anticipated Disruptions:</strong> ${disruptions}
+          <br><strong>Time Horizon:</strong> ${horizon.charAt(0).toUpperCase() + horizon.slice(1)} (next 5-10 years)
+          <br><br><em>${foresightEvidence}</em>
+        </div>
+      </div>
+
+      <div class="finding-card collective">
+        <div class="finding-title">
+          <span>🤝</span> Collective Intelligence Potential
+        </div>
+        <div class="finding-content">
+          <strong>Ecosystem Activity:</strong> ${ecosystemActivity.charAt(0).toUpperCase() + ecosystemActivity.slice(1)}
+          <br><strong>Examples Found:</strong> ${examples}
+          <br><br><em>${collectiveEvidence}</em>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  ${opportunities.length > 0 ? `
+  <div class="section">
+    <h2 class="section-title">Recommended Lab Engagement Opportunities</h2>
+    <div class="opportunities-list">
+      ${opportunities.map((opp, i) => `
+        <div class="opportunity-item">
+          <div class="opportunity-title">${i + 1}. ${opp.opportunity}</div>
+          <div class="opportunity-meta">
+            <span><strong>Dimension:</strong> ${opp.dimension === 'emerging_tech' ? 'Emerging Technology' : opp.dimension === 'foresight' ? 'Strategic Foresight' : 'Collective Intelligence'}</span>
+            <span><strong>Approach:</strong> ${opp.approach}</span>
+          </div>
+        </div>
+      `).join('')}
+    </div>
+  </div>
+  ` : ''}
+
+  <div class="key-insight-box">
+    <div class="key-insight-label">💡 Key Strategic Insight</div>
+    <div class="key-insight-text">${keyInsight}</div>
+  </div>
+
+  <div class="footer">
+    This analysis was generated using the ITS Innovation Lab's research-driven scoring methodology.
+    Recommendations should be validated through scoping conversations with project Task Team Leaders.
+    <br>
+    For more information, contact: its-innovation-labs@worldbank.org
+  </div>
+</div>`;
+}
+
+function extractDomain(projectName) {
+  return projectName
+    .replace(/project$/i, '')
+    .replace(/additional financing/i, '')
+    .replace(/phase [ivx0-9]+/i, '')
+    .replace(/\([^)]*\)/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+```
+
+---
+
+## FRONTEND INTEGRATION
+
+Add this to the main toolbar (next to "Generate Report"):
+
+```jsx
+const [detailedReportHtml, setDetailedReportHtml] = useState('');
+
+async function generateDetailedReport() {
+  const selectedProjects = projects.filter(p => selected.has(p.id));
+  const scoredProjects = selectedProjects.filter(p => scores[p.id]);
+
+  if (scoredProjects.length === 0) {
+    alert('Please select and score at least one project first');
+    return;
+  }
+
+  setGenerating(true);
+  try {
+    const projectsWithScores = scoredProjects.map(p => ({
+      ...p,
+      score: scores[p.id]
+    }));
+
+    const response = await fetch('/api/detailed-report', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projects: projectsWithScores })
+    });
+
+    const data = await response.json();
+
+    // Open report in new window
+    const reportWindow = window.open('', '_blank');
+    reportWindow.document.write(data.html);
+    reportWindow.document.close();
+
+  } catch (error) {
+    alert('Report generation failed: ' + error.message);
+  }
+  setGenerating(false);
+}
+```
+
+Add button in toolbar:
+
+```jsx
+<button
+  onClick={generateDetailedReport}
+  disabled={selected.size === 0 || generating}
+  className="bg-[#8b5cf6] text-white px-4 py-2 rounded hover:bg-[#7c3aed] transition disabled:bg-gray-300"
+>
+  {generating ? 'Generating...' : '📄 Detailed Report'}
+</button>
+```
+
+---
+
+## KEY FEATURES OF THE REPORT
+
+1. **One Page Per Project**: Each scored project gets exactly one elegantly formatted page
+2. **Ranked Order**: Projects appear in descending score order (highest scoring first)
+3. **Complete Methodology**: Clear explanation of the research-driven scoring approach
+4. **Visual Score Display**: Color-coded overall score with dimension breakdown
+5. **Research Justification**: All findings from web research with evidence
+6. **Actionable Recommendations**: Specific Lab engagement opportunities with approaches
+7. **Professional Design**: Clean, modern layout suitable for executive presentation
+8. **Print-Ready**: Optimized for A4/Letter paper with proper page breaks
+9. **Download as PDF**: Browser print-to-PDF for easy saving and sharing
+10. **No Markdown**: Pure HTML/CSS for consistent rendering across devices
+
+---
+
+## USAGE FLOW
+
+1. User searches for projects
+2. User selects multiple projects of interest
+3. User clicks "Score Selected" to run research-based analysis
+4. User clicks "📄 Detailed Report" button
+5. Report opens in new browser tab
+6. User can review on screen or click "📥 Download as PDF" to print/save
+7. Each project appears on its own page with full scoring justification
+
+This report format is suitable for:
+- Presenting to ITS Innovation Lab leadership
+- Sharing with World Bank Task Team Leaders
+- Internal documentation of opportunity assessments
+- Portfolio planning and prioritization discussions
