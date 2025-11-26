@@ -14,12 +14,6 @@ interface Project {
   sector1?: { Name: string };
 }
 
-interface SearchResult {
-  title: string;
-  description: string;
-  url: string;
-}
-
 function extractDomain(project: Project): string {
   const name = project.project_name.toLowerCase();
   const sector = project.sector1?.Name || '';
@@ -50,67 +44,6 @@ function extractDomain(project: Project): string {
   if (sector) return sector.toLowerCase();
 
   return 'development';
-}
-
-async function performWebSearch(query: string): Promise<string> {
-  try {
-    const response = await fetch(
-      `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=5`,
-      {
-        headers: {
-          'Accept': 'application/json',
-          'X-Subscription-Token': Deno.env.get('BRAVE_SEARCH_API_KEY') || ''
-        }
-      }
-    );
-
-    if (!response.ok) {
-      return 'Web search temporarily unavailable. Using general knowledge.';
-    }
-
-    const data = await response.json();
-    const results = data.web?.results || [];
-
-    if (results.length === 0) {
-      return 'No specific search results found.';
-    }
-
-    return results
-      .slice(0, 5)
-      .map((r: any, i: number) => `${i + 1}. ${r.title}\n   ${r.description}\n   Source: ${r.url}`)
-      .join('\n\n');
-  } catch (error) {
-    console.error('Web search error:', error);
-    return 'Web search unavailable. Analysis based on general knowledge.';
-  }
-}
-
-async function enrichPromptWithResearch(
-  project: Project,
-  basePrompt: string
-): Promise<string> {
-  const country = Array.isArray(project.countryname) ? project.countryname[0] : project.countryname;
-  const amount = project.totalamt;
-  const domain = extractDomain(project);
-
-  console.log(`Performing web research for: ${project.project_name} in ${domain} domain`);
-
-  const [emergingTechResults, foresightResults, collectiveResults] = await Promise.all([
-    performWebSearch(`${domain} emerging technology innovation AI blockchain IoT`),
-    performWebSearch(`${domain} future trends 2030 disruption transformation`),
-    performWebSearch(`${domain} innovation challenge hackathon startup ecosystem ${country}`)
-  ]);
-
-  let enrichedPrompt = basePrompt
-    .replace(/\[\[project_name\]\]/g, project.project_name)
-    .replace(/\[\[country\]\]/g, country)
-    .replace(/\[\[amount\]\]/g, amount)
-    .replace(/\[\[domain\]\]/g, domain)
-    .replace(/\[\[emerging_tech_results\]\]/g, emergingTechResults)
-    .replace(/\[\[foresight_results\]\]/g, foresightResults)
-    .replace(/\[\[collective_intel_results\]\]/g, collectiveResults);
-
-  return enrichedPrompt;
 }
 
 function generateDemoScore(project: Project) {
@@ -210,20 +143,61 @@ function generateDemoScore(project: Project) {
 }
 
 async function scoreWithAI(project: Project, prompt: string, model: string, apiKey: string) {
-  const enrichedPrompt = await enrichPromptWithResearch(project, prompt);
+  const country = Array.isArray(project.countryname) ? project.countryname[0] : project.countryname;
+  const amount = project.totalamt;
+  const domain = extractDomain(project);
+
+  console.log(`Scoring project with AI: ${project.project_name} in ${domain} domain`);
+
+  let enrichedPrompt = prompt
+    .replace(/\[\[project_name\]\]/g, project.project_name)
+    .replace(/\[\[country\]\]/g, country)
+    .replace(/\[\[amount\]\]/g, amount)
+    .replace(/\[\[domain\]\]/g, domain);
+
+  const searchInstructions = `
+IMPORTANT: Before scoring, you MUST conduct web searches for the following:
+
+1. Search for: "${domain} emerging technology innovation AI blockchain IoT digital transformation"
+2. Search for: "${domain} future trends 2030 disruption transformation ${country}"
+3. Search for: "${domain} innovation challenge hackathon startup ecosystem ${country}"
+
+Use the search results to provide specific, evidence-based scoring with real examples of:
+- Specific technologies being deployed in this domain
+- Named companies, startups, or initiatives
+- Actual innovation challenges or hackathons
+- Concrete disruptions and trends with sources
+- Real ecosystem players and accelerators
+
+Your analysis must be grounded in actual search findings, not generic knowledge.
+`;
+
+  enrichedPrompt = searchInstructions + "\n\n" + enrichedPrompt;
 
   if (model.startsWith('gpt')) {
+    const messages: any[] = [{ role: 'user', content: enrichedPrompt }];
+
+    const requestBody: any = {
+      model,
+      messages,
+      temperature: 0.7,
+      max_tokens: 3000
+    };
+
+    // Enable web search for models that support it
+    if (model.includes('gpt-4o') || model.includes('gpt-4-turbo') || model === 'gpt-4') {
+      requestBody.tools = [{
+        type: 'web_search'
+      }];
+    }
+
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`
       },
-      body: JSON.stringify({
-        model,
-        messages: [{ role: 'user', content: enrichedPrompt }],
-        temperature: 0.7
-      })
+      body: JSON.stringify(requestBody)
     });
 
     if (!response.ok) {
@@ -233,6 +207,9 @@ async function scoreWithAI(project: Project, prompt: string, model: string, apiK
 
     const data = await response.json();
     const content = data.choices[0].message.content;
+
+    console.log('OpenAI response received, extracting JSON...');
+
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       return { projectId: project.id, success: true, ...JSON.parse(jsonMatch[0]) };
@@ -248,7 +225,7 @@ async function scoreWithAI(project: Project, prompt: string, model: string, apiK
       },
       body: JSON.stringify({
         model,
-        max_tokens: 3000,
+        max_tokens: 4000,
         messages: [{ role: 'user', content: enrichedPrompt }]
       })
     });
@@ -260,6 +237,9 @@ async function scoreWithAI(project: Project, prompt: string, model: string, apiK
 
     const data = await response.json();
     const content = data.content[0].text;
+
+    console.log('Anthropic response received, extracting JSON...');
+
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       return { projectId: project.id, success: true, ...JSON.parse(jsonMatch[0]) };
