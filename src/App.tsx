@@ -446,18 +446,43 @@ function App() {
         },
         body: JSON.stringify({
           projects: scoredProjects,
-          prompt: reportPrompt,
-          model: activeModel,
-          apiKey: activeModel.startsWith('gpt') ? apiKeys.openai : apiKeys.anthropic
+          generatedDate: new Date().toISOString()
         })
       });
       const data = await response.json();
-      setReport(data.report);
+      if (data.error) {
+        throw new Error(data.error);
+      }
+      setReport(data.html);
       setReportOpen(true);
     } catch (error: any) {
       alert('Report generation failed: ' + error.message);
     }
     setGenerating(false);
+  };
+
+  const downloadReport = () => {
+    const blob = new Blob([report], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Innovation_Opportunity_Report_${new Date().toISOString().split('T')[0]}.html`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const printReport = () => {
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(report);
+      printWindow.document.close();
+      printWindow.focus();
+      setTimeout(() => {
+        printWindow.print();
+      }, 500);
+    }
   };
 
   const formatAmount = (amt: string) => {
@@ -1207,32 +1232,45 @@ function App() {
 
       {reportOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b flex justify-between items-center">
-              <h2 className="text-xl font-bold text-gray-800">Opportunity Report</h2>
-              <button
-                onClick={() => setReportOpen(false)}
-                className="text-gray-500 hover:text-gray-700"
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-5xl h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between p-4 border-b">
+              <h2 className="text-xl font-semibold text-gray-900">Innovation Opportunity Report</h2>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={downloadReport}
+                  className="flex items-center gap-2 px-4 py-2 bg-[#009FDA] text-white rounded-lg hover:bg-[#0088cc] transition"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                  Download HTML
+                </button>
+                <button
+                  onClick={printReport}
+                  className="flex items-center gap-2 px-4 py-2 bg-[#002244] text-white rounded-lg hover:bg-[#003366] transition"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                  </svg>
+                  Print / Save PDF
+                </button>
+                <button
+                  onClick={() => setReportOpen(false)}
+                  className="p-2 text-gray-500 hover:text-gray-700"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
             </div>
 
-            <div className="p-6">
-              <pre className="whitespace-pre-wrap font-sans text-gray-800 leading-relaxed">
-                {report}
-              </pre>
-            </div>
-
-            <div className="p-6 border-t bg-gray-50">
-              <button
-                onClick={() => setReportOpen(false)}
-                className="w-full bg-[#002244] text-white px-4 py-2 rounded hover:bg-[#003366] transition"
-              >
-                Close
-              </button>
+            <div className="flex-1 overflow-hidden">
+              <iframe
+                srcDoc={report}
+                className="w-full h-full border-0"
+                title="Report Preview"
+              />
             </div>
           </div>
         </div>
