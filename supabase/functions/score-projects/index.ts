@@ -14,89 +14,204 @@ interface Project {
   sector1?: { Name: string };
 }
 
+interface SearchResult {
+  title: string;
+  description: string;
+  url: string;
+}
+
+function extractDomain(project: Project): string {
+  const name = project.project_name.toLowerCase();
+  const sector = project.sector1?.Name || '';
+
+  const domainMap: Record<string, string> = {
+    'digital': 'digital economy',
+    'health': 'healthcare',
+    'education': 'education',
+    'transport': 'transportation',
+    'agriculture': 'agriculture',
+    'energy': 'energy',
+    'water': 'water',
+    'urban': 'urban development',
+    'financial': 'financial services',
+    'trade': 'trade',
+    'climate': 'climate',
+    'infrastructure': 'infrastructure',
+    'governance': 'governance',
+    'environment': 'environment'
+  };
+
+  for (const [keyword, domain] of Object.entries(domainMap)) {
+    if (name.includes(keyword) || sector.toLowerCase().includes(keyword)) {
+      return domain;
+    }
+  }
+
+  if (sector) return sector.toLowerCase();
+
+  return 'development';
+}
+
+async function performWebSearch(query: string): Promise<string> {
+  try {
+    const response = await fetch(
+      `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=5`,
+      {
+        headers: {
+          'Accept': 'application/json',
+          'X-Subscription-Token': Deno.env.get('BRAVE_SEARCH_API_KEY') || ''
+        }
+      }
+    );
+
+    if (!response.ok) {
+      return 'Web search temporarily unavailable. Using general knowledge.';
+    }
+
+    const data = await response.json();
+    const results = data.web?.results || [];
+
+    if (results.length === 0) {
+      return 'No specific search results found.';
+    }
+
+    return results
+      .slice(0, 5)
+      .map((r: any, i: number) => `${i + 1}. ${r.title}\n   ${r.description}\n   Source: ${r.url}`)
+      .join('\n\n');
+  } catch (error) {
+    console.error('Web search error:', error);
+    return 'Web search unavailable. Analysis based on general knowledge.';
+  }
+}
+
+async function enrichPromptWithResearch(
+  project: Project,
+  basePrompt: string
+): Promise<string> {
+  const country = Array.isArray(project.countryname) ? project.countryname[0] : project.countryname;
+  const amount = project.totalamt;
+  const domain = extractDomain(project);
+
+  console.log(`Performing web research for: ${project.project_name} in ${domain} domain`);
+
+  const [emergingTechResults, foresightResults, collectiveResults] = await Promise.all([
+    performWebSearch(`${domain} emerging technology innovation AI blockchain IoT`),
+    performWebSearch(`${domain} future trends 2030 disruption transformation`),
+    performWebSearch(`${domain} innovation challenge hackathon startup ecosystem ${country}`)
+  ]);
+
+  let enrichedPrompt = basePrompt
+    .replace(/\[\[project_name\]\]/g, project.project_name)
+    .replace(/\[\[country\]\]/g, country)
+    .replace(/\[\[amount\]\]/g, amount)
+    .replace(/\[\[domain\]\]/g, domain)
+    .replace(/\[\[emerging_tech_results\]\]/g, emergingTechResults)
+    .replace(/\[\[foresight_results\]\]/g, foresightResults)
+    .replace(/\[\[collective_intel_results\]\]/g, collectiveResults);
+
+  return enrichedPrompt;
+}
+
 function generateDemoScore(project: Project) {
   const name = project.project_name.toLowerCase();
   const country = Array.isArray(project.countryname) ? project.countryname[0] : project.countryname;
   const amount = parseInt((project.totalamt || '0').replace(/,/g, ''), 10);
-  
+
   const techKeywords = ['digital', 'technology', 'innovation', 'ai', 'data', 'blockchain', 'iot', 'cloud', 'smart', 'cyber', 'internet', 'mobile', 'fintech', 'agtech'];
   const foresightKeywords = ['transformation', 'future', 'resilience', 'sustainability', 'climate', 'renewable', 'green', 'circular', 'adaptation'];
   const collectiveKeywords = ['ecosystem', 'partnership', 'collaborative', 'inclusive', 'participation', 'community', 'stakeholder'];
-  
+
   const hasTech = techKeywords.some(k => name.includes(k));
   const hasForesight = foresightKeywords.some(k => name.includes(k));
   const hasCollective = collectiveKeywords.some(k => name.includes(k));
-  
+
   const techScore = hasTech ? 7 + Math.random() * 2 : 4 + Math.random() * 2;
   const foresightScore = hasForesight ? 7 + Math.random() * 2 : 4 + Math.random() * 2;
   const collectiveScore = hasCollective ? 7 + Math.random() * 2 : 4 + Math.random() * 2;
-  
+
   const overallScore = (techScore * 0.35 + foresightScore * 0.35 + collectiveScore * 0.30);
-  
+
   const technologies = [];
-  if (name.includes('digital')) technologies.push('Digital Public Infrastructure');
-  if (name.includes('data')) technologies.push('Data analytics');
-  if (name.includes('ai')) technologies.push('Artificial Intelligence');
-  if (name.includes('blockchain')) technologies.push('Blockchain');
-  if (name.includes('iot')) technologies.push('Internet of Things');
-  if (name.includes('cloud')) technologies.push('Cloud computing');
-  if (technologies.length === 0) technologies.push('Digital platforms');
-  
+  if (name.includes('digital')) technologies.push('Digital Public Infrastructure', 'Cloud-native platforms');
+  if (name.includes('data')) technologies.push('Data analytics', 'AI/ML systems');
+  if (name.includes('ai')) technologies.push('Artificial Intelligence', 'Machine Learning');
+  if (name.includes('blockchain')) technologies.push('Blockchain', 'Distributed ledgers');
+  if (name.includes('iot')) technologies.push('Internet of Things', 'IoT sensors');
+  if (name.includes('cloud')) technologies.push('Cloud computing', 'Edge computing');
+  if (technologies.length === 0) technologies.push('Digital platforms', 'Automation systems');
+
   const disruptions = [];
-  if (name.includes('transform')) disruptions.push('Digital transformation');
-  if (name.includes('climate')) disruptions.push('Climate adaptation');
-  if (name.includes('sustain')) disruptions.push('Sustainability transition');
-  if (disruptions.length === 0) disruptions.push('Market evolution');
-  
+  if (name.includes('transform')) disruptions.push('Digital transformation', 'Process automation');
+  if (name.includes('climate')) disruptions.push('Climate adaptation', 'Green transition');
+  if (name.includes('sustain')) disruptions.push('Sustainability transition', 'Circular economy');
+  if (disruptions.length === 0) disruptions.push('Market evolution', 'Regulatory changes');
+
+  const examples = [];
+  if (country.toLowerCase().includes('africa')) {
+    examples.push('Regional tech hubs and accelerators', 'Mobile innovation challenges');
+  } else if (country.toLowerCase().includes('asia')) {
+    examples.push('Government innovation labs', 'Smart city hackathons');
+  } else {
+    examples.push('Innovation challenges', 'Public-private partnerships');
+  }
+
   const primaryDim = Math.max(techScore, foresightScore, collectiveScore);
   let primary = 'emerging_tech';
   if (primaryDim === foresightScore) primary = 'foresight';
   else if (primaryDim === collectiveScore) primary = 'collective_intelligence';
-  
+
   return {
     projectId: project.id,
     success: true,
     emerging_tech: {
       score: Math.round(techScore * 10) / 10,
       technologies,
-      applications: [`${technologies[0]} for ${project.project_name}`],
-      evidence: 'Research indicates active technology innovation in this domain.'
+      applications: [`${technologies[0]} for service delivery`, `${technologies[1] || 'Digital solutions'} for efficiency`],
+      evidence: `Research indicates active technology innovation in this domain with proven applications of ${technologies[0]} and ${technologies[1] || 'related technologies'}.`
     },
     foresight: {
       score: Math.round(foresightScore * 10) / 10,
       disruptions,
       horizon: foresightScore > 6.5 ? 'long-term' : 'medium-term',
-      evidence: 'Domain facing significant disruption requiring forward planning.'
+      evidence: `Domain facing significant ${disruptions[0]} requiring forward planning. ${foresightScore > 7 ? 'High' : 'Moderate'} disruption velocity suggests strong need for future-proofing.`
     },
     collective_intelligence: {
       score: Math.round(collectiveScore * 10) / 10,
       ecosystem_activity: collectiveScore > 6.5 ? 'high' : 'moderate',
-      examples: ['Innovation challenges', 'Public consultations'],
-      evidence: 'Ecosystem engagement opportunities identified in research.'
+      examples,
+      evidence: `${collectiveScore > 6.5 ? 'Vibrant' : 'Growing'} ecosystem with precedent for innovation engagement. Examples include ${examples[0]} demonstrating active community.`
     },
     relevance: {
       score: Math.round((overallScore * 0.8 + Math.random() * 2)),
-      rationale: 'Project scope aligns with identified innovation opportunities.'
+      rationale: `Project's ${extractDomain(project)} focus strongly aligns with identified innovation opportunities in ${country}. The $${amount} investment scale provides significant opportunity for Lab engagement.`
     },
     overall_score: Math.round(overallScore * 10) / 10,
     primary_dimension: primary,
     top_opportunities: [
       {
-        opportunity: `Leverage ${technologies[0]} for scaling impact`,
+        opportunity: `Deploy ${technologies[0]} proof-of-value to demonstrate scalable solutions`,
         dimension: 'emerging_tech',
-        approach: 'Technology partnership'
+        approach: 'Proof of Value'
       },
       {
-        opportunity: `Address ${disruptions[0]} through foresight planning`,
+        opportunity: `Conduct Three Horizons foresight workshop to address ${disruptions[0]}`,
         dimension: 'foresight',
-        approach: 'Strategic advisory'
+        approach: 'Foresight Workshop'
+      },
+      {
+        opportunity: `Launch innovation challenge leveraging local ecosystem for ${extractDomain(project)} solutions`,
+        dimension: 'collective_intelligence',
+        approach: 'Innovation Challenge'
       }
     ],
-    key_insight: `Strong potential in ${primary.replace('_', ' ')} with ${country} context.`
+    key_insight: `${country}'s ${extractDomain(project)} sector shows ${overallScore > 7 ? 'exceptional' : 'significant'} potential for Innovation Lab engagement, particularly through ${primary.replace('_', ' ')} approaches. The project's scale and scope create opportunities for demonstrating impact at national level.`
   };
 }
 
 async function scoreWithAI(project: Project, prompt: string, model: string, apiKey: string) {
+  const enrichedPrompt = await enrichPromptWithResearch(project, prompt);
+
   if (model.startsWith('gpt')) {
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -106,12 +221,16 @@ async function scoreWithAI(project: Project, prompt: string, model: string, apiK
       },
       body: JSON.stringify({
         model,
-        messages: [{ role: 'user', content: prompt.replace('{{project_json}}', JSON.stringify(project)) }],
+        messages: [{ role: 'user', content: enrichedPrompt }],
         temperature: 0.7
       })
     });
-    
-    if (!response.ok) throw new Error('OpenAI API failed');
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`OpenAI API failed: ${errorText}`);
+    }
+
     const data = await response.json();
     const content = data.choices[0].message.content;
     const jsonMatch = content.match(/\{[\s\S]*\}/);
@@ -129,12 +248,16 @@ async function scoreWithAI(project: Project, prompt: string, model: string, apiK
       },
       body: JSON.stringify({
         model,
-        max_tokens: 2000,
-        messages: [{ role: 'user', content: prompt.replace('{{project_json}}', JSON.stringify(project)) }]
+        max_tokens: 3000,
+        messages: [{ role: 'user', content: enrichedPrompt }]
       })
     });
-    
-    if (!response.ok) throw new Error('Anthropic API failed');
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Anthropic API failed: ${errorText}`);
+    }
+
     const data = await response.json();
     const content = data.content[0].text;
     const jsonMatch = content.match(/\{[\s\S]*\}/);
@@ -153,7 +276,7 @@ Deno.serve(async (req: Request) => {
   try {
     const { projects, prompt, model, apiKey } = await req.json();
     const results = [];
-    
+
     for (const project of projects) {
       try {
         if (model === 'demo' || !apiKey) {
@@ -162,6 +285,7 @@ Deno.serve(async (req: Request) => {
           results.push(await scoreWithAI(project, prompt, model, apiKey));
         }
       } catch (error: any) {
+        console.error(`Error scoring project ${project.id}:`, error);
         results.push({
           projectId: project.id,
           success: false,
@@ -169,12 +293,13 @@ Deno.serve(async (req: Request) => {
         });
       }
     }
-    
+
     return new Response(
       JSON.stringify({ results }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error: any) {
+    console.error('Score-projects error:', error);
     return new Response(
       JSON.stringify({ error: error.message }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
