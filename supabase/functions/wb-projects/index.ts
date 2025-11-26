@@ -55,13 +55,24 @@ Deno.serve(async (req: Request) => {
 
     console.log(`Fetched ${projectsArray.length} projects from WB API`);
 
+    // Debug: Show sample of fetched data
+    if (projectsArray.length > 0) {
+      const sample = projectsArray[0];
+      console.log('Sample project:', {
+        id: sample.id,
+        status: sample.status,
+        region: sample.regionname,
+        date: sample.boardapprovaldate
+      });
+    }
+
     // Apply client-side filters
     if (statusList.length > 0) {
       const beforeFilter = projectsArray.length;
       projectsArray = projectsArray.filter((p: any) =>
         statusList.includes(p.status)
       );
-      console.log(`Status filter: ${beforeFilter} -> ${projectsArray.length} projects`);
+      console.log(`Status filter (${statusList.join(',')}): ${beforeFilter} -> ${projectsArray.length} projects`);
     }
 
     if (regions && regions !== 'All') {
@@ -75,11 +86,13 @@ Deno.serve(async (req: Request) => {
       const toYear = parseInt(yearTo);
       const beforeFilter = projectsArray.length;
       projectsArray = projectsArray.filter((p: any) => {
-        if (!p.approvalfy) return false;
-        const year = parseInt(p.approvalfy);
+        // Extract year from boardapprovaldate (format: YYYY-MM-DDTHH:MM:SSZ)
+        const date = p.boardapprovaldate;
+        if (!date) return false;
+        const year = parseInt(date.substring(0, 4));
         return year >= fromYear && year <= toYear;
       });
-      console.log(`Year filter: ${beforeFilter} -> ${projectsArray.length} projects`);
+      console.log(`Year filter (${fromYear}-${toYear}): ${beforeFilter} -> ${projectsArray.length} projects`);
     }
 
     // Paginate the filtered results
