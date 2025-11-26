@@ -446,12 +446,6 @@ function App() {
       setProjects(loadedProjects);
       setTotal(data.total || 0);
       setMockMode(data.mock || false);
-
-      // Load scores only for currently visible projects
-      if (loadedProjects.length > 0) {
-        const projectIds = loadedProjects.map((p: any) => p.id);
-        await loadScores(projectIds);
-      }
     } catch (error: any) {
       console.error('Search error:', error);
       alert(`Failed to load projects: ${error.message}\n\nPlease check that the edge functions are deployed correctly.`);
@@ -463,6 +457,8 @@ function App() {
 
   const handleSearch = () => {
     setPage(1);
+    setScores({});
+    setSelected(new Set());
     searchProjects();
   };
 
@@ -475,6 +471,8 @@ function App() {
       keyword: ''
     });
     setPage(1);
+    setScores({});
+    setSelected(new Set());
   };
 
   const toggleSelect = (id: string) => {
