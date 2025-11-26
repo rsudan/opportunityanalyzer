@@ -173,6 +173,11 @@ interface Score {
 }
 
 function App() {
+  console.log('App component mounting...');
+  console.log('Supabase URL:', import.meta.env.VITE_SUPABASE_URL);
+  console.log('Supabase Key:', import.meta.env.VITE_SUPABASE_ANON_KEY ? 'SET' : 'NOT SET');
+  console.log('Supabase client:', supabase ? 'INITIALIZED' : 'NULL');
+
   const [filters, setFilters] = useState({
     region: 'All',
     statuses: ['Pipeline'],
