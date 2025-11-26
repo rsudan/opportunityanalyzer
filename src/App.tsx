@@ -86,36 +86,44 @@ RESPOND WITH VALID JSON ONLY (no markdown code blocks):
   "key_insight": "<one sentence strategic recommendation for Lab engagement>"
 }`;
 
-const DEFAULT_REPORT_PROMPT = `You are preparing an innovation opportunity briefing for the World Bank ITS Innovation Lab leadership.
+const DEFAULT_REPORT_PROMPT = `INNOVATION OPPORTUNITY ASSESSMENT REPORT
 
-Based on the scored projects below, create a concise executive briefing.
+This automated report generator creates a comprehensive, elegantly formatted HTML document for all scored projects.
 
-SCORED PROJECTS:
-[[projects_json]]
+REPORT STRUCTURE:
 
-Generate a briefing with:
+1. COVER PAGE
+   - Project statistics (total analyzed, high priority count, total financing)
+   - Professional World Bank ITS Innovation Labs branding
+   - Generation date
 
-1. EXECUTIVE SUMMARY (50 words max)
-   - How many projects analyzed
-   - Overall innovation landscape assessment
-   - Top recommendation
+2. METHODOLOGY PAGE
+   - Detailed explanation of the three scoring dimensions
+   - Scoring formula and weights
+   - Key signals for each dimension
 
-2. TOP 5 OPPORTUNITIES
-   For each, include:
-   - Project name and country
-   - Overall score and primary dimension (Foresight/Tech/Collective)
-   - Key opportunity in one sentence
-   - Recommended Lab engagement approach
+3. EXECUTIVE SUMMARY
+   - Table of all projects sorted by score (highest to lowest)
+   - Quick reference with project name, country, amount, and primary dimension
 
-3. THEMATIC PATTERNS
-   - What technology themes appear across multiple projects?
-   - What regions show highest innovation potential?
-   - What foresight concerns are most pressing?
+4. INDIVIDUAL PROJECT PAGES (one per project)
+   - Overall score with color-coded visualization
+   - Primary dimension identification (Technology/Foresight/Collective Intelligence)
+   - Score breakdown for all three dimensions with progress bars
+   - Research findings grid:
+     * Technologies identified
+     * Anticipated disruptions
+     * Ecosystem activity
+     * Relevance assessment
+   - Recommended engagement opportunities (numbered list)
+   - Key insights and strategic recommendations
 
-4. RECOMMENDED NEXT STEPS
-   - 3 specific actions for the Lab team
+5. DOWNLOAD OPTIONS
+   - Download as HTML file (can be shared via email)
+   - Print to PDF via browser for presentations
+   - Professional formatting optimized for both screen and print
 
-Keep the briefing under 500 words. Use clear, direct language suitable for senior leadership.`;
+The report automatically includes ALL scored projects (not limited to 5) and uses World Bank color scheme with professional typography for stakeholder presentations.`;
 
 const REGIONS = [
   'All',
@@ -179,7 +187,7 @@ function App() {
 
   const [filters, setFilters] = useState({
     region: 'All',
-    statuses: ['Pipeline'],
+    statuses: ['Active', 'Pipeline', 'Closed'],
     yearFrom: '2020',
     yearTo: '2025',
     keyword: ''
