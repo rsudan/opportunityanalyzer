@@ -86,44 +86,139 @@ RESPOND WITH VALID JSON ONLY (no markdown code blocks):
   "key_insight": "<one sentence strategic recommendation for Lab engagement>"
 }`;
 
-const DEFAULT_REPORT_PROMPT = `INNOVATION OPPORTUNITY ASSESSMENT REPORT
+const DEFAULT_REPORT_PROMPT = `INNOVATION OPPORTUNITY ASSESSMENT REPORT GENERATOR
 
-This automated report generator creates a comprehensive, elegantly formatted HTML document for all scored projects.
+This feature generates an elegantly formatted, downloadable Innovation Opportunity Report for all scored projects.
 
-REPORT STRUCTURE:
+## REPORT REQUIREMENTS
 
-1. COVER PAGE
-   - Project statistics (total analyzed, high priority count, total financing)
-   - Professional World Bank ITS Innovation Labs branding
-   - Generation date
+1. **Format**: Clean HTML document styled for professional presentation (not markdown)
+2. **Structure**: One page per project, projects listed in descending score order
+3. **Content**: Methodology explanation + detailed justification for each project's score
+4. **Download**: User can download as HTML file (which can be printed to PDF)
 
-2. METHODOLOGY PAGE
-   - Detailed explanation of the three scoring dimensions
-   - Scoring formula and weights
-   - Key signals for each dimension
+---
 
-3. EXECUTIVE SUMMARY
-   - Table of all projects sorted by score (highest to lowest)
-   - Quick reference with project name, country, amount, and primary dimension
+## REPORT STRUCTURE
 
-4. INDIVIDUAL PROJECT PAGES (one per project)
-   - Overall score with color-coded visualization
-   - Primary dimension identification (Technology/Foresight/Collective Intelligence)
-   - Score breakdown for all three dimensions with progress bars
-   - Research findings grid:
-     * Technologies identified
-     * Anticipated disruptions
-     * Ecosystem activity
-     * Relevance assessment
-   - Recommended engagement opportunities (numbered list)
-   - Key insights and strategic recommendations
+### COVER PAGE
+- World Bank Group · ITS Innovation Labs branding
+- Report title: "Innovation Opportunity Assessment Report"
+- Subtitle: "Strategic Analysis of World Bank Projects for Technology and Innovation Engagement"
+- Key statistics:
+  * Total projects analyzed
+  * Number of high-priority projects (score ≥ 7)
+  * Total financing amount
+- Generation date
 
-5. DOWNLOAD OPTIONS
-   - Download as HTML file (can be shared via email)
-   - Print to PDF via browser for presentations
-   - Professional formatting optimized for both screen and print
+### METHODOLOGY PAGE
+Explains the scoring system:
+- **Strategic Foresight (35% weight)**: Need for future-proofing and anticipatory planning
+  * Key signals: Long implementation horizons, infrastructure lock-in risk, policy/strategy components
+- **Emerging Technology (35% weight)**: Applicable frontier technologies (AI/ML, Blockchain, IoT, Drones, DPI)
+  * Key signals: Proven applications, solution maturity, relevance to challenges
+- **Collective Intelligence (30% weight)**: Potential for challenges, hackathons, ecosystem engagement
+  * Key signals: Startup ecosystem activity, precedent challenges, multi-stakeholder complexity
+- **Score Formula**: Base × Relevance × Scale (max 10)
 
-The report automatically includes ALL scored projects (not limited to 5) and uses World Bank color scheme with professional typography for stakeholder presentations.`;
+### EXECUTIVE SUMMARY PAGE
+Table with all projects sorted by score (highest to lowest):
+- Rank number
+- Project name and ID
+- Country
+- Financing amount
+- Overall score (color-coded circle)
+- Primary dimension badge
+
+### INDIVIDUAL PROJECT PAGES (one per project)
+Each project gets a detailed page with:
+
+**Header Section:**
+- Project rank (e.g., "Project #1 of 25")
+- Project name (large, serif font)
+- Metadata: Country, financing amount, project ID
+- Overall score (large color-coded circle)
+- Primary dimension badge
+
+**Score Breakdown:**
+Three cards showing scores for each dimension:
+- Dimension name and score (large number)
+- Progress bar (color-coded)
+- Evidence summary text
+
+**Research Findings Grid:**
+Four-card grid showing:
+- Technologies Identified (from emerging_tech.technologies)
+- Anticipated Disruptions (from foresight.disruptions)
+- Ecosystem Activity (from collective_intelligence.examples)
+- Relevance Assessment (from relevance.rationale)
+
+**Recommended Engagement Opportunities:**
+Numbered list of top opportunities (if available):
+- Opportunity description
+- Approach and dimension tag
+
+**Key Insight:**
+Strategic recommendation quote (if available)
+
+**Footer:**
+- World Bank ITS Innovation Labs
+- Page number (e.g., "Page 4 of 28")
+
+---
+
+## DESIGN SPECIFICATIONS
+
+**Colors:**
+- World Bank Dark Blue: #002244
+- World Bank Light Blue: #009FDA
+- Green (high scores ≥7): #059669
+- Amber (medium scores 5-6.9): #D97706
+- Gray (low scores <5): #6B7280
+
+**Typography:**
+- Headers: Source Serif Pro
+- Body: Source Sans Pro
+- Weights: 300, 400, 600, 700
+
+**Layout:**
+- Max width: 850px
+- Professional spacing with consistent padding
+- Page breaks between major sections
+- Print-optimized CSS
+
+**Score Visualization:**
+- Circular badges for overall scores
+- Progress bars for dimension breakdown
+- Color-coding throughout (green/amber/gray)
+
+---
+
+## DOWNLOAD OPTIONS
+
+1. **Download HTML**: User clicks to download the complete report as an HTML file
+   - Filename format: Innovation_Opportunity_Report_YYYY-MM-DD.html
+   - Self-contained with embedded CSS
+   - Can be shared via email or uploaded to SharePoint
+
+2. **Print to PDF**: User clicks to open print dialog
+   - Opens report in new window
+   - Triggers browser print dialog
+   - User can save as PDF with proper page breaks
+
+---
+
+## REPORT FEATURES
+
+✓ Includes ALL scored projects (not limited to 5)
+✓ Automatically sorts by score (highest to lowest)
+✓ Professional World Bank branding and color scheme
+✓ Responsive design optimized for both screen and print
+✓ Self-contained HTML (no external dependencies)
+✓ Color-coded scores and visualizations
+✓ Detailed evidence and justifications
+✓ Strategic recommendations for each project
+✓ Ready for stakeholder presentations`;
 
 const REGIONS = [
   'All',
