@@ -532,18 +532,23 @@ function App() {
 
           const project = selectedProjects.find(p => p.id === result.projectId);
           if (project && supabase) {
-            await (supabase.from('project_scores') as any).upsert({
-              project_id: result.projectId,
-              project_name: project.project_name,
-              country: Array.isArray(project.countryname) ? project.countryname.join(', ') : project.countryname,
-              region: project.regionname,
-              sector: project.sector1?.Name || project.mjsector1Name,
-              amount: project.totalamt,
-              status: project.status,
-              score_data: result,
-              web_search_results: result.web_search_results || null,
-              updated_at: new Date().toISOString()
-            });
+            await (supabase.from('project_scores') as any).upsert(
+              {
+                project_id: result.projectId,
+                project_name: project.project_name,
+                country: Array.isArray(project.countryname) ? project.countryname.join(', ') : project.countryname,
+                region: project.regionname,
+                sector: project.sector1?.Name || project.mjsector1Name,
+                amount: project.totalamt,
+                status: project.status,
+                score_data: result,
+                web_search_results: result.web_search_results || null,
+                updated_at: new Date().toISOString()
+              },
+              {
+                onConflict: 'project_id'
+              }
+            );
           }
         }
       }
@@ -728,7 +733,7 @@ function App() {
   };
 
   const ScoreBadge = ({ score }: { score?: Score }) => {
-    if (!score) return <span className="text-gray-400">—</span>;
+    if (!score || !score.overall_score) return <span className="text-gray-400">—</span>;
 
     const overall = score.overall_score;
     const color = overall >= 7 ? 'bg-green-500' : overall >= 5 ? 'bg-yellow-500' : 'bg-gray-400';
@@ -752,9 +757,9 @@ function App() {
         </div>
         <div className="absolute hidden group-hover:block bg-gray-900 text-white text-xs rounded p-2 -top-24 left-1/2 transform -translate-x-1/2 w-56 z-10">
           <div className="font-semibold mb-1">{primary.icon} {primary.name}</div>
-          <div>Tech: {score.emerging_tech?.score.toFixed(1) || '?'}</div>
-          <div>Foresight: {score.foresight?.score.toFixed(1) || '?'}</div>
-          <div>Collective: {score.collective_intelligence?.score.toFixed(1) || '?'}</div>
+          <div>Tech: {score.emerging_tech?.score?.toFixed(1) || '?'}</div>
+          <div>Foresight: {score.foresight?.score?.toFixed(1) || '?'}</div>
+          <div>Collective: {score.collective_intelligence?.score?.toFixed(1) || '?'}</div>
           <div className="mt-1 text-gray-300 text-xs italic">{score.key_insight}</div>
         </div>
       </div>
