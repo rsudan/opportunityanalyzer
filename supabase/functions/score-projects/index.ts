@@ -361,7 +361,7 @@ If search results are limited, acknowledge this and provide a conservative score
     const requestBody: any = {
       model: model,
       messages,
-      temperature: 0.5,
+      temperature: 0.1,
       max_tokens: 4000
     };
 
@@ -400,7 +400,7 @@ If search results are limited, acknowledge this and provide a conservative score
       body: JSON.stringify({
         model,
         max_tokens: 4096,
-        temperature: 0.5,
+        temperature: 0.1,
         messages: [{ role: 'user', content: enrichedPrompt }]
       })
     });
