@@ -53,6 +53,7 @@ After completing all three searches, synthesize your findings to evaluate the pr
 RESPOND WITH VALID JSON ONLY (no markdown code blocks):
 
 {
+  "overall_score": <1-10 weighted average of all dimensions>,
   "emerging_tech": {
     "score": <1-10>,
     "technologies": ["<relevant tech found>"],

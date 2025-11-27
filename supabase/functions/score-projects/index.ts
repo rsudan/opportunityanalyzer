@@ -78,37 +78,55 @@ async function performWebSearch(query: string, count: number = 10): Promise<Sear
     console.warn(`All search methods failed for: ${query}`);
     return [];
   } catch (error) {
-    console.error(`Search error for "${query}":`, error);
+    console.error(`Search error for \"${query}\":`, error);
     return [];
   }
 }
 
 async function searchWithDuckDuckGo(query: string, count: number): Promise<SearchResult[]> {
-  const url = `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1`;
+  const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
 
   const response = await fetch(url, {
     headers: {
-      'User-Agent': 'Mozilla/5.0 (compatible; WorldBankBot/1.0)'
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     }
   });
 
   if (!response.ok) {
-    throw new Error(`DDG API returned ${response.status}`);
+    throw new Error(`DDG returned ${response.status}`);
   }
 
-  const data = await response.json();
+  const html = await response.text();
   const results: SearchResult[] = [];
 
-  if (data.RelatedTopics && Array.isArray(data.RelatedTopics)) {
-    for (const topic of data.RelatedTopics.slice(0, count)) {
-      if (topic.FirstURL && topic.Text) {
-        results.push({
-          url: topic.FirstURL,
-          title: topic.Text.substring(0, 100),
-          description: topic.Text
-        });
-      }
+  // Extract search results from DDG HTML
+  const resultPattern = /<a[^>]+class=\"result__a\"[^>]+href=\"([^\"]+)\"[^>]*>([^<]+)<\/a>/g;
+  const snippetPattern = /<a[^>]+class=\"result__snippet\"[^>]*>([^<]+)<\/a>/g;
+
+  const urls: Array<{url: string, title: string}> = [];
+  let match;
+
+  while ((match = resultPattern.exec(html)) !== null && urls.length < count) {
+    const decodedUrl = decodeURIComponent(match[1]).replace(/^\/\/duckduckgo\.com\/l\/\?uddg=/, '').split('&')[0];
+    if (decodedUrl && !decodedUrl.includes('duckduckgo.com')) {
+      urls.push({
+        url: decodedUrl,
+        title: match[2].trim()
+      });
     }
+  }
+
+  const snippets: string[] = [];
+  while ((match = snippetPattern.exec(html)) !== null && snippets.length < count) {
+    snippets.push(match[1].trim());
+  }
+
+  for (let i = 0; i < Math.min(urls.length, count); i++) {
+    results.push({
+      url: urls[i].url,
+      title: urls[i].title,
+      description: snippets[i] || urls[i].title
+    });
   }
 
   return results;
@@ -133,7 +151,7 @@ async function searchWithBrave(query: string, count: number): Promise<SearchResu
   const results: SearchResult[] = [];
 
   // Extract URLs and titles from Brave search results
-  const urlPattern = /<a[^>]+href="([^"]+)"[^>]*class="[^"]*result[^"]*"[^>]*>([^<]+)<\/a>/gi;
+  const urlPattern = /<a[^>]+href=\"([^\"]+)\"[^>]*class=\"[^\"]*result[^\"]*\"[^>]*>([^<]+)<\/a>/gi;
   let match;
 
   while ((match = urlPattern.exec(html)) !== null && results.length < count) {
@@ -283,11 +301,24 @@ If search results are limited, acknowledge this and provide a conservative score
 
   const jsonMatch = content.match(/\{[\s\S]*\}/);
   if (jsonMatch) {
+    const parsed = JSON.parse(jsonMatch[0]);
+
+    // Calculate overall_score if not provided
+    if (!parsed.overall_score) {
+      const techScore = parsed.emerging_tech?.score || 0;
+      const foresightScore = parsed.foresight?.score || 0;
+      const collectiveScore = parsed.collective_intelligence?.score || 0;
+      const relevanceScore = parsed.relevance?.score || 0;
+
+      // Weighted average: 25% each for tech, foresight, collective, and 25% for relevance
+      parsed.overall_score = (techScore + foresightScore + collectiveScore + relevanceScore) / 4;
+    }
+
     return {
       projectId: project.id,
       success: true,
       web_search_results: searchResults,
-      ...JSON.parse(jsonMatch[0])
+      ...parsed
     };
   }
   throw new Error('No JSON in response');
