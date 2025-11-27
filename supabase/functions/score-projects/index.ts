@@ -157,134 +157,6 @@ function formatSearchResults(results: SearchResult[]): string {
     .join('\n\n');
 }
 
-function generateDemoScore(project: Project) {
-  const name = project.project_name.toLowerCase();
-  const country = Array.isArray(project.countryname) ? project.countryname[0] : project.countryname;
-  const amount = parseInt((project.totalamt || '0').replace(/,/g, ''), 10);
-
-  const techKeywords = ['digital', 'technology', 'innovation', 'ai', 'data', 'blockchain', 'iot', 'cloud', 'smart', 'cyber', 'internet', 'mobile', 'fintech', 'agtech'];
-  const foresightKeywords = ['transformation', 'future', 'resilience', 'sustainability', 'climate', 'renewable', 'green', 'circular', 'adaptation'];
-  const collectiveKeywords = ['ecosystem', 'partnership', 'collaborative', 'inclusive', 'participation', 'community', 'stakeholder'];
-
-  const hasTech = techKeywords.some(k => name.includes(k));
-  const hasForesight = foresightKeywords.some(k => name.includes(k));
-  const hasCollective = collectiveKeywords.some(k => name.includes(k));
-
-  const techScore = hasTech ? 7 + Math.random() * 2 : 4 + Math.random() * 2;
-  const foresightScore = hasForesight ? 7 + Math.random() * 2 : 4 + Math.random() * 2;
-  const collectiveScore = hasCollective ? 7 + Math.random() * 2 : 4 + Math.random() * 2;
-
-  const overallScore = (techScore * 0.35 + foresightScore * 0.35 + collectiveScore * 0.30);
-
-  const technologies = [];
-  if (name.includes('digital')) technologies.push('Digital Public Infrastructure', 'Cloud-native platforms');
-  if (name.includes('data')) technologies.push('Data analytics', 'AI/ML systems');
-  if (name.includes('ai')) technologies.push('Artificial Intelligence', 'Machine Learning');
-  if (name.includes('blockchain')) technologies.push('Blockchain', 'Distributed ledgers');
-  if (name.includes('iot')) technologies.push('Internet of Things', 'IoT sensors');
-  if (name.includes('cloud')) technologies.push('Cloud computing', 'Edge computing');
-  if (technologies.length === 0) technologies.push('Digital platforms', 'Automation systems');
-
-  const disruptions = [];
-  if (name.includes('transform')) disruptions.push('Digital transformation', 'Process automation');
-  if (name.includes('climate')) disruptions.push('Climate adaptation', 'Green transition');
-  if (name.includes('sustain')) disruptions.push('Sustainability transition', 'Circular economy');
-  if (disruptions.length === 0) disruptions.push('Market evolution', 'Regulatory changes');
-
-  const examples = [];
-  if (country.toLowerCase().includes('africa')) {
-    examples.push('Regional tech hubs and accelerators', 'Mobile innovation challenges');
-  } else if (country.toLowerCase().includes('asia')) {
-    examples.push('Government innovation labs', 'Smart city hackathons');
-  } else {
-    examples.push('Innovation challenges', 'Public-private partnerships');
-  }
-
-  const primaryDim = Math.max(techScore, foresightScore, collectiveScore);
-  let primary = 'emerging_tech';
-  if (primaryDim === foresightScore) primary = 'foresight';
-  else if (primaryDim === collectiveScore) primary = 'collective_intelligence';
-
-  const domain = extractDomain(project);
-  const mockWebSearchResults = {
-    'Emerging Technology': [
-      { title: `${technologies[0]} adoption in ${domain}`, description: `Recent advances in ${technologies[0]} technology show promising applications for ${domain} sector`, url: 'https://example.com/demo-search-1' },
-      { title: `${technologies[1] || 'Innovation'} trends 2024`, description: `Industry analysis shows growing implementation of ${technologies[1] || 'digital solutions'}`, url: 'https://example.com/demo-search-2' }
-    ],
-    'Innovation Ecosystem': [
-      { title: `${country} innovation landscape`, description: `Overview of startup ecosystem and innovation programs in ${country}`, url: 'https://example.com/demo-search-3' },
-      { title: `${examples[0]}`, description: `Active innovation initiatives including ${examples[0]} in the region`, url: 'https://example.com/demo-search-4' }
-    ],
-    'Future Trends': [
-      { title: `${domain} sector outlook 2030`, description: `Key disruptions include ${disruptions[0]} shaping the future of ${domain}`, url: 'https://example.com/demo-search-5' },
-      { title: 'Global innovation trends', description: `Emerging patterns in technology adoption and digital transformation`, url: 'https://example.com/demo-search-6' }
-    ],
-    'Case Studies': [
-      { title: `Successful ${domain} projects`, description: `Case studies of innovation deployment in similar contexts`, url: 'https://example.com/demo-search-7' }
-    ],
-    'Market Analysis': [
-      { title: `${country} ${domain} market`, description: `Market dynamics and investment opportunities in the sector`, url: 'https://example.com/demo-search-8' }
-    ],
-    'Technology Companies': [
-      { title: `${domain} solution providers`, description: `Leading technology vendors and platforms serving the sector`, url: 'https://example.com/demo-search-9' }
-    ],
-    'World Bank Innovation': [
-      { title: `World Bank innovation projects in ${country}`, description: `Related innovation initiatives and digital development projects`, url: 'https://example.com/demo-search-10' }
-    ],
-    'Research Publications': [
-      { title: `${domain} innovation research`, description: `Academic and industry research on technology adoption and impact`, url: 'https://example.com/demo-search-11' }
-    ]
-  };
-
-  return {
-    projectId: project.id,
-    success: true,
-    web_search_results: mockWebSearchResults,
-    emerging_tech: {
-      score: Math.round(techScore * 10) / 10,
-      technologies,
-      applications: [`${technologies[0]} for service delivery`, `${technologies[1] || 'Digital solutions'} for efficiency`],
-      evidence: `Research indicates active technology innovation in this domain with proven applications of ${technologies[0]} and ${technologies[1] || 'related technologies'}.`
-    },
-    foresight: {
-      score: Math.round(foresightScore * 10) / 10,
-      disruptions,
-      horizon: foresightScore > 6.5 ? 'long-term' : 'medium-term',
-      evidence: `Domain facing significant ${disruptions[0]} requiring forward planning. ${foresightScore > 7 ? 'High' : 'Moderate'} disruption velocity suggests strong need for future-proofing.`
-    },
-    collective_intelligence: {
-      score: Math.round(collectiveScore * 10) / 10,
-      ecosystem_activity: collectiveScore > 6.5 ? 'high' : 'moderate',
-      examples,
-      evidence: `${collectiveScore > 6.5 ? 'Vibrant' : 'Growing'} ecosystem with precedent for innovation engagement. Examples include ${examples[0]} demonstrating active community.`
-    },
-    relevance: {
-      score: Math.round((overallScore * 0.8 + Math.random() * 2)),
-      rationale: `Project's ${extractDomain(project)} focus strongly aligns with identified innovation opportunities in ${country}. The $${amount} investment scale provides significant opportunity for Lab engagement.`
-    },
-    overall_score: Math.round(overallScore * 10) / 10,
-    primary_dimension: primary,
-    top_opportunities: [
-      {
-        opportunity: `Deploy ${technologies[0]} proof-of-value to demonstrate scalable solutions`,
-        dimension: 'emerging_tech',
-        approach: 'Proof of Value'
-      },
-      {
-        opportunity: `Conduct Three Horizons foresight workshop to address ${disruptions[0]}`,
-        dimension: 'foresight',
-        approach: 'Foresight Workshop'
-      },
-      {
-        opportunity: `Launch innovation challenge leveraging local ecosystem for ${extractDomain(project)} solutions`,
-        dimension: 'collective_intelligence',
-        approach: 'Innovation Challenge'
-      }
-    ],
-    key_insight: `${country}'s ${extractDomain(project)} sector shows ${overallScore > 7 ? 'exceptional' : 'significant'} potential for Innovation Lab engagement, particularly through ${primary.replace('_', ' ')} approaches. The project's scale and scope create opportunities for demonstrating impact at national level.`
-  };
-}
-
 async function scoreWithAI(project: Project, prompt: string, model: string, apiKey: string): Promise<any> {
   const country = Array.isArray(project.countryname) ? project.countryname[0] : project.countryname;
   const amount = project.totalamt;
@@ -465,17 +337,31 @@ Deno.serve(async (req: Request) => {
 
   try {
     const { projects, prompt, model, apiKey } = await req.json();
+
+    if (!apiKey) {
+      return new Response(
+        JSON.stringify({
+          error: 'API key is required. Please configure your OpenAI or Anthropic API key in Settings.'
+        }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (!model || model === 'demo') {
+      return new Response(
+        JSON.stringify({
+          error: 'Valid AI model required. Please select GPT-4 or Claude in Settings.'
+        }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     const results = [];
 
     for (const project of projects) {
       try {
-        if (model === 'demo' || !apiKey) {
-          console.log(`Using demo mode for project: ${project.id}`);
-          results.push(generateDemoScore(project));
-        } else {
-          console.log(`Scoring with AI for project: ${project.id}`);
-          results.push(await scoreWithAI(project, prompt, model, apiKey));
-        }
+        console.log(`Scoring with AI for project: ${project.id}`);
+        results.push(await scoreWithAI(project, prompt, model, apiKey));
       } catch (error: any) {
         console.error(`Error scoring project ${project.id}:`, error);
         results.push({

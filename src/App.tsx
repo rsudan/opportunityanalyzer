@@ -294,7 +294,7 @@ function App() {
   const [scores, setScores] = useState<Record<string, Score>>({});
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [apiKeys, setApiKeys] = useState({ openai: '', anthropic: '' });
-  const [activeModel, setActiveModel] = useState('demo');
+  const [activeModel, setActiveModel] = useState('gpt-4o');
   const [customModel, setCustomModel] = useState('');
   const [customModels, setCustomModels] = useState<string[]>([]);
   const [aiTest, setAiTest] = useState<{ provider: string; status: string; message: string } | null>(null);
@@ -337,7 +337,7 @@ function App() {
         openai: data.openai_key || '',
         anthropic: data.anthropic_key || ''
       });
-      setActiveModel(data.active_model || 'demo');
+      setActiveModel(data.active_model || 'gpt-4o');
       setCustomModels(data.custom_models || []);
       if (data.scoring_prompt) setScoringPrompt(data.scoring_prompt);
       if (data.report_prompt) setReportPrompt(data.report_prompt);
@@ -375,7 +375,7 @@ function App() {
   const removeCustomModel = (model: string) => {
     setCustomModels(customModels.filter(m => m !== model));
     if (activeModel === model) {
-      setActiveModel('demo');
+      setActiveModel('gpt-4o');
     }
   };
 
@@ -499,6 +499,12 @@ function App() {
       return;
     }
 
+    const requiredKey = activeModel.startsWith('gpt') ? apiKeys.openai : apiKeys.anthropic;
+    if (!requiredKey) {
+      alert(`API key required for ${activeModel.startsWith('gpt') ? 'OpenAI' : 'Anthropic'} models. Please configure in Settings.`);
+      return;
+    }
+
     setScoring(true);
     try {
       const selectedProjects = projects.filter(p => selected.has(p.id));
@@ -513,10 +519,16 @@ function App() {
           projects: selectedProjects,
           prompt: scoringPrompt,
           model: activeModel,
-          apiKey: activeModel.startsWith('gpt') ? apiKeys.openai : apiKeys.anthropic
+          apiKey: requiredKey
         })
       });
       const data = await response.json();
+
+      if (data.error) {
+        alert('Scoring failed: ' + data.error);
+        setScoring(false);
+        return;
+      }
 
       const newScores = { ...scores };
       for (const result of data.results) {
@@ -1379,9 +1391,8 @@ function App() {
                   onChange={(e) => setActiveModel(e.target.value)}
                   className="w-full border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-[#009FDA] focus:border-transparent mb-2"
                 >
-                  <option value="demo">Demo Mode (no key needed)</option>
                   <optgroup label="OpenAI Models">
-                    <option value="gpt-4o">GPT-4o</option>
+                    <option value="gpt-4o">GPT-4o (Recommended)</option>
                     <option value="gpt-4-turbo">GPT-4 Turbo</option>
                     <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
                   </optgroup>
