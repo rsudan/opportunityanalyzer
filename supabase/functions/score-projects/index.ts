@@ -57,7 +57,6 @@ async function performWebSearch(query: string, count: number = 10): Promise<Sear
   try {
     console.log(`Performing thorough search: ${query}`);
 
-    // Use SearXNG public instance for better results
     const searxUrl = `https://searx.be/search?q=${encodeURIComponent(query)}&format=json&engines=google,bing,duckduckgo&categories=general`;
 
     const response = await fetch(searxUrl, {
@@ -98,7 +97,6 @@ async function performWebSearch(query: string, count: number = 10): Promise<Sear
 
 async function fallbackSearch(query: string, count: number): Promise<SearchResult[]> {
   try {
-    // Fallback to DuckDuckGo Lite API
     const ddgUrl = `https://lite.duckduckgo.com/lite/?q=${encodeURIComponent(query)}`;
 
     const response = await fetch(ddgUrl, {
@@ -115,7 +113,6 @@ async function fallbackSearch(query: string, count: number): Promise<SearchResul
     const html = await response.text();
     const results: SearchResult[] = [];
 
-    // Parse DuckDuckGo Lite results - simpler HTML structure
     const linkRegex = /<a[^>]+href="([^"]+)"[^>]*class="result-link"[^>]*>([^<]+)<\/a>/g;
     const snippetRegex = /<td[^>]+class="result-snippet"[^>]*>([^<]+)<\/td>/g;
 
@@ -263,10 +260,8 @@ async function scoreWithAI(project: Project, prompt: string, model: string, apiK
 
   console.log(`Scoring project: ${project.project_name} (${domain} in ${country})`);
 
-  // Perform comprehensive web searches
   console.log('Conducting web research...');
 
-  // Create specific, detailed search queries
   const projectKeywords = project.project_name.toLowerCase().split(' ').filter(w => w.length > 4).slice(0, 3).join(' ');
   const sectorName = project.sector1?.Name || domain;
 
@@ -311,14 +306,12 @@ async function scoreWithAI(project: Project, prompt: string, model: string, apiK
     const results = await performWebSearch(search.query, 10);
     searchResults[search.name] = results;
     console.log(`Completed ${search.name}: ${results.length} results`);
-    // Delay to avoid rate limiting
     await new Promise(resolve => setTimeout(resolve, 800));
   }
 
   const totalResults = Object.values(searchResults).reduce((sum, results) => sum + results.length, 0);
   console.log(`Total search results collected: ${totalResults}`);
 
-  // Build enriched prompt with actual search results
   const searchContext = Object.entries(searchResults)
     .map(([name, results]) => {
       return `### ${name} Search Results\n${formatSearchResults(results)}`;
