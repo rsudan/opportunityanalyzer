@@ -323,6 +323,7 @@ function App() {
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
   const [webSearchTest, setWebSearchTest] = useState<{ status: string; message: string; searchResults?: string } | null>(null);
   const [testingWebSearch, setTestingWebSearch] = useState(false);
+  const [viewingResearch, setViewingResearch] = useState<{ projectId: string; projectName: string; results: any } | null>(null);
 
   useEffect(() => {
     loadSettings();
@@ -544,6 +545,7 @@ function App() {
               amount: project.totalamt,
               status: project.status,
               score_data: result,
+              web_search_results: result.web_search_results || null,
               updated_at: new Date().toISOString()
             });
           }
@@ -596,6 +598,26 @@ function App() {
       alert('Report generation failed: ' + error.message);
     }
     setGenerating(false);
+  };
+
+  const viewWebResearch = async (projectId: string) => {
+    if (!supabase) return;
+
+    const { data } = await supabase
+      .from('project_scores')
+      .select('project_name, web_search_results')
+      .eq('project_id', projectId)
+      .maybeSingle() as any;
+
+    if (data && data.web_search_results) {
+      setViewingResearch({
+        projectId,
+        projectName: data.project_name,
+        results: data.web_search_results
+      });
+    } else {
+      alert('No web research data available for this project');
+    }
   };
 
   const downloadReport = () => {
@@ -1128,6 +1150,9 @@ function App() {
                       <th className="p-3 text-left text-sm font-semibold text-gray-700 cursor-pointer hover:bg-gray-200 select-none" onClick={() => sortProjects('score')}>
                         Score<SortIcon columnKey="score" />
                       </th>
+                      <th className="p-3 text-left text-sm font-semibold text-gray-700">
+                        Research
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1160,6 +1185,17 @@ function App() {
                         </td>
                         <td className="p-3">
                           <ScoreBadge score={scores[project.id]} />
+                        </td>
+                        <td className="p-3">
+                          {scores[project.id] && (
+                            <button
+                              onClick={() => viewWebResearch(project.id)}
+                              className="text-blue-600 hover:text-blue-800 text-sm underline"
+                              title="View web research data used for scoring"
+                            >
+                              Research
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -1504,6 +1540,61 @@ function App() {
                 className="w-full h-full border-0"
                 title="Report Preview"
               />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {viewingResearch && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b flex justify-between items-center sticky top-0 bg-white">
+              <h2 className="text-xl font-bold text-gray-800">Web Research Data: {viewingResearch.projectName}</h2>
+              <button
+                onClick={() => setViewingResearch(null)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {Object.entries(viewingResearch.results).map(([category, results]: [string, any]) => (
+                <div key={category} className="border rounded-lg p-4 bg-gray-50">
+                  <h3 className="text-lg font-semibold text-gray-800 mb-3">{category}</h3>
+                  <div className="space-y-3">
+                    {Array.isArray(results) && results.length > 0 ? (
+                      results.map((result: any, index: number) => (
+                        <div key={index} className="bg-white p-3 rounded border border-gray-200">
+                          <div className="font-semibold text-gray-900 mb-1">{index + 1}. {result.title}</div>
+                          <div className="text-sm text-gray-600 mb-2">{result.description}</div>
+                          <a
+                            href={result.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-sm text-blue-600 hover:text-blue-800 underline break-all"
+                          >
+                            {result.url}
+                          </a>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-gray-500 italic">No results found for this category</div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="p-6 border-t bg-gray-50 sticky bottom-0">
+              <button
+                onClick={() => setViewingResearch(null)}
+                className="w-full bg-[#002244] text-white px-4 py-2 rounded hover:bg-[#003366] transition"
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>

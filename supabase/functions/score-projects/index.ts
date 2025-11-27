@@ -256,7 +256,7 @@ function generateDemoScore(project: Project) {
   };
 }
 
-async function scoreWithAI(project: Project, prompt: string, model: string, apiKey: string) {
+async function scoreWithAI(project: Project, prompt: string, model: string, apiKey: string): Promise<any> {
   const country = Array.isArray(project.countryname) ? project.countryname[0] : project.countryname;
   const amount = project.totalamt;
   const domain = extractDomain(project);
@@ -386,7 +386,12 @@ If search results are limited, acknowledge this and provide a conservative score
 
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
-      return { projectId: project.id, success: true, ...JSON.parse(jsonMatch[0]) };
+      return {
+        projectId: project.id,
+        success: true,
+        web_search_results: searchResults,
+        ...JSON.parse(jsonMatch[0])
+      };
     }
     throw new Error('No JSON in response');
   } else {
@@ -417,7 +422,12 @@ If search results are limited, acknowledge this and provide a conservative score
 
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
-      return { projectId: project.id, success: true, ...JSON.parse(jsonMatch[0]) };
+      return {
+        projectId: project.id,
+        success: true,
+        web_search_results: searchResults,
+        ...JSON.parse(jsonMatch[0])
+      };
     }
     throw new Error('No JSON in response');
   }
