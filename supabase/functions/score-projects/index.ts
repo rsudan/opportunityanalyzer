@@ -55,97 +55,98 @@ function extractDomain(project: Project): string {
 
 async function performWebSearch(query: string, count: number = 10): Promise<SearchResult[]> {
   try {
-    console.log(`Performing thorough search: ${query}`);
+    console.log(`Performing search: ${query}`);
 
-    const searxUrl = `https://searx.be/search?q=${encodeURIComponent(query)}&format=json&engines=google,bing,duckduckgo&categories=general`;
+    // Try multiple search backends in sequence
+    const searchMethods = [
+      () => searchWithDuckDuckGo(query, count),
+      () => searchWithBrave(query, count),
+    ];
 
-    const response = await fetch(searxUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Accept': 'application/json'
-      }
-    });
-
-    if (!response.ok) {
-      console.warn(`Search failed with status ${response.status}, falling back to alternative`);
-      return await fallbackSearch(query, count);
-    }
-
-    const data = await response.json();
-    const results: SearchResult[] = [];
-
-    if (data.results && Array.isArray(data.results)) {
-      for (let i = 0; i < Math.min(count, data.results.length); i++) {
-        const result = data.results[i];
-        if (result.url && result.title) {
-          results.push({
-            url: result.url,
-            title: result.title,
-            description: result.content || result.title
-          });
+    for (const method of searchMethods) {
+      try {
+        const results = await method();
+        if (results.length > 0) {
+          console.log(`Found ${results.length} results for: ${query}`);
+          return results;
         }
+      } catch (error) {
+        console.warn(`Search method failed, trying next...`, error);
       }
     }
 
-    console.log(`Found ${results.length} results for: ${query}`);
-    return results;
+    console.warn(`All search methods failed for: ${query}`);
+    return [];
   } catch (error) {
-    console.error(`Search error for \"${query}\":`, error);
-    return await fallbackSearch(query, count);
-  }
-}
-
-async function fallbackSearch(query: string, count: number): Promise<SearchResult[]> {
-  try {
-    const ddgUrl = `https://lite.duckduckgo.com/lite/?q=${encodeURIComponent(query)}`;
-
-    const response = await fetch(ddgUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-      }
-    });
-
-    if (!response.ok) {
-      console.warn(`Fallback search also failed`);
-      return [];
-    }
-
-    const html = await response.text();
-    const results: SearchResult[] = [];
-
-    const linkRegex = /<a[^>]+href=\"([^\"]+)\"[^>]*class=\"result-link\"[^>]*>([^<]+)<\/a>/g;
-    const snippetRegex = /<td[^>]+class=\"result-snippet\"[^>]*>([^<]+)<\/td>/g;
-
-    const links: Array<{url: string, title: string}> = [];
-    let linkMatch;
-    while ((linkMatch = linkRegex.exec(html)) !== null && links.length < count) {
-      links.push({
-        url: linkMatch[1],
-        title: linkMatch[2].trim()
-      });
-    }
-
-    const snippets: string[] = [];
-    let snippetMatch;
-    while ((snippetMatch = snippetRegex.exec(html)) !== null && snippets.length < count) {
-      snippets.push(snippetMatch[1].trim());
-    }
-
-    for (let i = 0; i < Math.min(links.length, count); i++) {
-      results.push({
-        url: links[i].url,
-        title: links[i].title,
-        description: snippets[i] || links[i].title
-      });
-    }
-
-    console.log(`Fallback found ${results.length} results`);
-    return results;
-  } catch (error) {
-    console.error(`Fallback search error:`, error);
+    console.error(`Search error for "${query}":`, error);
     return [];
   }
 }
+
+async function searchWithDuckDuckGo(query: string, count: number): Promise<SearchResult[]> {
+  const url = `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1`;
+
+  const response = await fetch(url, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (compatible; WorldBankBot/1.0)'
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`DDG API returned ${response.status}`);
+  }
+
+  const data = await response.json();
+  const results: SearchResult[] = [];
+
+  if (data.RelatedTopics && Array.isArray(data.RelatedTopics)) {
+    for (const topic of data.RelatedTopics.slice(0, count)) {
+      if (topic.FirstURL && topic.Text) {
+        results.push({
+          url: topic.FirstURL,
+          title: topic.Text.substring(0, 100),
+          description: topic.Text
+        });
+      }
+    }
+  }
+
+  return results;
+}
+
+async function searchWithBrave(query: string, count: number): Promise<SearchResult[]> {
+  // Brave Search API fallback - using their public API
+  const url = `https://search.brave.com/search?q=${encodeURIComponent(query)}&source=web`;
+
+  const response = await fetch(url, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`Brave search returned ${response.status}`);
+  }
+
+  // Parse HTML response (simplified extraction)
+  const html = await response.text();
+  const results: SearchResult[] = [];
+
+  // Extract URLs and titles from Brave search results
+  const urlPattern = /<a[^>]+href="([^"]+)"[^>]*class="[^"]*result[^"]*"[^>]*>([^<]+)<\/a>/gi;
+  let match;
+
+  while ((match = urlPattern.exec(html)) !== null && results.length < count) {
+    results.push({
+      url: match[1],
+      title: match[2],
+      description: match[2]
+    });
+  }
+
+  return results;
+}
+
 
 function formatSearchResults(results: SearchResult[]): string {
   if (results.length === 0) {
