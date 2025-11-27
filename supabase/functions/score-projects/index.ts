@@ -250,84 +250,46 @@ If search results are limited, acknowledge this and provide a conservative score
 
   enrichedPrompt = webResearchSection + "\n\n" + enrichedPrompt;
 
-  console.log(`Calling AI model: ${model}`);
+  console.log(`Calling OpenAI model: ${model}`);
 
-  if (model.startsWith('gpt')) {
-    const messages: any[] = [{ role: 'user', content: enrichedPrompt }];
+  const messages: any[] = [{ role: 'user', content: enrichedPrompt }];
 
-    const requestBody: any = {
-      model: model,
-      messages,
-      temperature: 0.1,
-      max_tokens: 4000
-    };
+  const requestBody: any = {
+    model: model,
+    messages,
+    temperature: 0.1,
+    max_tokens: 4000
+  };
 
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
-      },
-      body: JSON.stringify(requestBody)
-    });
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`
+    },
+    body: JSON.stringify(requestBody)
+  });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`OpenAI API failed: ${errorText}`);
-    }
-
-    const data = await response.json();
-    const content = data.choices[0].message.content;
-
-    console.log('OpenAI response received, extracting JSON...');
-
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      return {
-        projectId: project.id,
-        success: true,
-        web_search_results: searchResults,
-        ...JSON.parse(jsonMatch[0])
-      };
-    }
-    throw new Error('No JSON in response');
-  } else {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify({
-        model,
-        max_tokens: 4096,
-        temperature: 0.1,
-        messages: [{ role: 'user', content: enrichedPrompt }]
-      })
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Anthropic API failed: ${errorText}`);
-    }
-
-    const data = await response.json();
-    const content = data.content[0].text;
-
-    console.log('Anthropic response received, extracting JSON...');
-
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      return {
-        projectId: project.id,
-        success: true,
-        web_search_results: searchResults,
-        ...JSON.parse(jsonMatch[0])
-      };
-    }
-    throw new Error('No JSON in response');
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`OpenAI API failed: ${errorText}`);
   }
+
+  const data = await response.json();
+  const content = data.choices[0].message.content;
+
+  console.log('OpenAI response received, extracting JSON...');
+
+  const jsonMatch = content.match(/\{[\s\S]*\}/);
+  if (jsonMatch) {
+    return {
+      projectId: project.id,
+      success: true,
+      web_search_results: searchResults,
+      ...JSON.parse(jsonMatch[0])
+    };
+  }
+  throw new Error('No JSON in response');
 }
 
 Deno.serve(async (req: Request) => {
@@ -341,16 +303,16 @@ Deno.serve(async (req: Request) => {
     if (!apiKey) {
       return new Response(
         JSON.stringify({
-          error: 'API key is required. Please configure your OpenAI or Anthropic API key in Settings.'
+          error: 'OpenAI API key is required. Please configure your API key in Settings.'
         }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    if (!model || model === 'demo') {
+    if (!model || model === 'demo' || !model.startsWith('gpt')) {
       return new Response(
         JSON.stringify({
-          error: 'Valid AI model required. Please select GPT-4 or Claude in Settings.'
+          error: 'Valid OpenAI model required. Please select GPT-4o, GPT-4 Turbo, or GPT-3.5 Turbo in Settings.'
         }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );

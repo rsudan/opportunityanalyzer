@@ -293,7 +293,7 @@ function App() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [scores, setScores] = useState<Record<string, Score>>({});
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [apiKeys, setApiKeys] = useState({ openai: '', anthropic: '' });
+  const [apiKey, setApiKey] = useState('');
   const [activeModel, setActiveModel] = useState('gpt-4o');
   const [customModel, setCustomModel] = useState('');
   const [customModels, setCustomModels] = useState<string[]>([]);
@@ -333,10 +333,7 @@ function App() {
       .maybeSingle() as any;
 
     if (data) {
-      setApiKeys({
-        openai: data.openai_key || '',
-        anthropic: data.anthropic_key || ''
-      });
+      setApiKey(data.openai_key || '');
       setActiveModel(data.active_model || 'gpt-4o');
       setCustomModels(data.custom_models || []);
       if (data.scoring_prompt) setScoringPrompt(data.scoring_prompt);
@@ -350,8 +347,7 @@ function App() {
     try {
       await (supabase.from('user_settings') as any).upsert({
         user_id: 'default',
-        openai_key: apiKeys.openai,
-        anthropic_key: apiKeys.anthropic,
+        openai_key: apiKey,
         active_model: activeModel,
         custom_models: customModels,
         scoring_prompt: scoringPrompt,
@@ -499,9 +495,8 @@ function App() {
       return;
     }
 
-    const requiredKey = activeModel.startsWith('gpt') ? apiKeys.openai : apiKeys.anthropic;
-    if (!requiredKey) {
-      alert(`API key required for ${activeModel.startsWith('gpt') ? 'OpenAI' : 'Anthropic'} models. Please configure in Settings.`);
+    if (!apiKey) {
+      alert('OpenAI API key required. Please configure in Settings.');
       return;
     }
 
@@ -519,7 +514,7 @@ function App() {
           projects: selectedProjects,
           prompt: scoringPrompt,
           model: activeModel,
-          apiKey: requiredKey
+          apiKey: apiKey
         })
       });
       const data = await response.json();
@@ -766,14 +761,13 @@ function App() {
     );
   };
 
-  const testAiModel = async (provider: 'openai' | 'anthropic') => {
+  const testAiModel = async () => {
     setTestingAi(true);
     setAiTest(null);
 
-    const apiKey = provider === 'openai' ? apiKeys.openai : apiKeys.anthropic;
     if (!apiKey) {
       setAiTest({
-        provider,
+        provider: 'openai',
         status: 'error',
         message: 'API key not provided'
       });
@@ -784,61 +778,33 @@ function App() {
     try {
       const testPrompt = 'Say "API test successful" in exactly three words.';
 
-      if (provider === 'openai') {
-        const response = await fetch('https://api.openai.com/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${apiKey}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            model: 'gpt-3.5-turbo',
-            messages: [{ role: 'user', content: testPrompt }],
-            max_tokens: 10
-          })
-        });
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: 'gpt-3.5-turbo',
+          messages: [{ role: 'user', content: testPrompt }],
+          max_tokens: 10
+        })
+      });
 
-        const data = await response.json();
+      const data = await response.json();
 
-        if (data.error) {
-          throw new Error(data.error.message);
-        }
-
-        setAiTest({
-          provider,
-          status: 'success',
-          message: `OpenAI API connected successfully. Response: "${data.choices[0].message.content}"`
-        });
-      } else {
-        const response = await fetch('https://api.anthropic.com/v1/messages', {
-          method: 'POST',
-          headers: {
-            'x-api-key': apiKey,
-            'Content-Type': 'application/json',
-            'anthropic-version': '2023-06-01'
-          },
-          body: JSON.stringify({
-            model: 'claude-3-haiku-20240307',
-            max_tokens: 10,
-            messages: [{ role: 'user', content: testPrompt }]
-          })
-        });
-
-        const data = await response.json();
-
-        if (data.error) {
-          throw new Error(data.error.message);
-        }
-
-        setAiTest({
-          provider,
-          status: 'success',
-          message: `Anthropic API connected successfully. Response: "${data.content[0].text}"`
-        });
+      if (data.error) {
+        throw new Error(data.error.message);
       }
+
+      setAiTest({
+        provider: 'openai',
+        status: 'success',
+        message: `OpenAI API connected successfully. Response: "${data.choices[0].message.content}"`
+      });
     } catch (error: any) {
       setAiTest({
-        provider,
+        provider: 'openai',
         status: 'error',
         message: `Failed: ${error.message}`
       });
@@ -851,7 +817,7 @@ function App() {
     setTestingWebSearch(true);
     setWebSearchTest(null);
 
-    if (!apiKeys.openai) {
+    if (!apiKey) {
       setWebSearchTest({
         status: 'error',
         message: 'OpenAI API key required for web search test'
@@ -865,7 +831,7 @@ function App() {
       const response = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${apiKeys.openai}`,
+          'Authorization': `Bearer ${apiKey}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
@@ -1292,52 +1258,21 @@ function App() {
                         <label className="block text-sm font-medium text-gray-700 mb-1">OpenAI API Key</label>
                         <input
                           type="password"
-                          value={apiKeys.openai}
-                          onChange={(e) => setApiKeys({ ...apiKeys, openai: e.target.value })}
+                          value={apiKey}
+                          onChange={(e) => setApiKey(e.target.value)}
                           placeholder="sk-..."
                           className="w-full border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-[#009FDA] focus:border-transparent"
                         />
                       </div>
                       <button
-                        onClick={() => testAiModel('openai')}
-                        disabled={testingAi || !apiKeys.openai}
+                        onClick={testAiModel}
+                        disabled={testingAi || !apiKey}
                         className="ml-2 mt-6 bg-[#009FDA] text-white px-3 py-2 rounded hover:bg-[#0088cc] transition disabled:bg-gray-300 disabled:cursor-not-allowed text-sm whitespace-nowrap"
                       >
                         {testingAi ? 'Testing...' : 'Test'}
                       </button>
                     </div>
                     {aiTest && aiTest.provider === 'openai' && (
-                      <div className={`mt-2 p-2 rounded text-xs ${
-                        aiTest.status === 'success'
-                          ? 'bg-green-50 border border-green-200 text-green-800'
-                          : 'bg-red-50 border border-red-200 text-red-800'
-                      }`}>
-                        {aiTest.message}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="p-4 bg-gray-50 rounded border border-gray-200">
-                    <div className="flex justify-between items-start mb-2">
-                      <div className="flex-1">
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Anthropic API Key</label>
-                        <input
-                          type="password"
-                          value={apiKeys.anthropic}
-                          onChange={(e) => setApiKeys({ ...apiKeys, anthropic: e.target.value })}
-                          placeholder="sk-ant-..."
-                          className="w-full border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-[#009FDA] focus:border-transparent"
-                        />
-                      </div>
-                      <button
-                        onClick={() => testAiModel('anthropic')}
-                        disabled={testingAi || !apiKeys.anthropic}
-                        className="ml-2 mt-6 bg-[#009FDA] text-white px-3 py-2 rounded hover:bg-[#0088cc] transition disabled:bg-gray-300 disabled:cursor-not-allowed text-sm whitespace-nowrap"
-                      >
-                        {testingAi ? 'Testing...' : 'Test'}
-                      </button>
-                    </div>
-                    {aiTest && aiTest.provider === 'anthropic' && (
                       <div className={`mt-2 p-2 rounded text-xs ${
                         aiTest.status === 'success'
                           ? 'bg-green-50 border border-green-200 text-green-800'
@@ -1358,7 +1293,7 @@ function App() {
                       </div>
                       <button
                         onClick={testWebSearch}
-                        disabled={testingWebSearch || !apiKeys.openai}
+                        disabled={testingWebSearch || !apiKey}
                         className="ml-2 bg-blue-600 text-white px-3 py-2 rounded hover:bg-blue-700 transition disabled:bg-gray-300 disabled:cursor-not-allowed text-sm whitespace-nowrap"
                       >
                         {testingWebSearch ? 'Searching...' : 'Test Web Search'}
@@ -1391,16 +1326,9 @@ function App() {
                   onChange={(e) => setActiveModel(e.target.value)}
                   className="w-full border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-[#009FDA] focus:border-transparent mb-2"
                 >
-                  <optgroup label="OpenAI Models">
-                    <option value="gpt-4o">GPT-4o (Recommended)</option>
-                    <option value="gpt-4-turbo">GPT-4 Turbo</option>
-                    <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
-                  </optgroup>
-                  <optgroup label="Anthropic Models">
-                    <option value="claude-sonnet-4-20250514">Claude Sonnet 4</option>
-                    <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet</option>
-                    <option value="claude-3-haiku-20240307">Claude 3 Haiku</option>
-                  </optgroup>
+                  <option value="gpt-4o">GPT-4o (Recommended)</option>
+                  <option value="gpt-4-turbo">GPT-4 Turbo</option>
+                  <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
                   {customModels.length > 0 && (
                     <optgroup label="Custom Models">
                       {customModels.map(model => (
