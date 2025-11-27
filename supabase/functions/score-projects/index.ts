@@ -90,7 +90,7 @@ async function performWebSearch(query: string, count: number = 10): Promise<Sear
     console.log(`Found ${results.length} results for: ${query}`);
     return results;
   } catch (error) {
-    console.error(`Search error for "${query}":`, error);
+    console.error(`Search error for \"${query}\":`, error);
     return await fallbackSearch(query, count);
   }
 }
@@ -113,8 +113,8 @@ async function fallbackSearch(query: string, count: number): Promise<SearchResul
     const html = await response.text();
     const results: SearchResult[] = [];
 
-    const linkRegex = /<a[^>]+href="([^"]+)"[^>]*class="result-link"[^>]*>([^<]+)<\/a>/g;
-    const snippetRegex = /<td[^>]+class="result-snippet"[^>]*>([^<]+)<\/td>/g;
+    const linkRegex = /<a[^>]+href=\"([^\"]+)\"[^>]*class=\"result-link\"[^>]*>([^<]+)<\/a>/g;
+    const snippetRegex = /<td[^>]+class=\"result-snippet\"[^>]*>([^<]+)<\/td>/g;
 
     const links: Array<{url: string, title: string}> = [];
     let linkMatch;
@@ -205,9 +205,41 @@ function generateDemoScore(project: Project) {
   if (primaryDim === foresightScore) primary = 'foresight';
   else if (primaryDim === collectiveScore) primary = 'collective_intelligence';
 
+  const domain = extractDomain(project);
+  const mockWebSearchResults = {
+    'Emerging Technology': [
+      { title: `${technologies[0]} adoption in ${domain}`, description: `Recent advances in ${technologies[0]} technology show promising applications for ${domain} sector`, url: 'https://example.com/demo-search-1' },
+      { title: `${technologies[1] || 'Innovation'} trends 2024`, description: `Industry analysis shows growing implementation of ${technologies[1] || 'digital solutions'}`, url: 'https://example.com/demo-search-2' }
+    ],
+    'Innovation Ecosystem': [
+      { title: `${country} innovation landscape`, description: `Overview of startup ecosystem and innovation programs in ${country}`, url: 'https://example.com/demo-search-3' },
+      { title: `${examples[0]}`, description: `Active innovation initiatives including ${examples[0]} in the region`, url: 'https://example.com/demo-search-4' }
+    ],
+    'Future Trends': [
+      { title: `${domain} sector outlook 2030`, description: `Key disruptions include ${disruptions[0]} shaping the future of ${domain}`, url: 'https://example.com/demo-search-5' },
+      { title: 'Global innovation trends', description: `Emerging patterns in technology adoption and digital transformation`, url: 'https://example.com/demo-search-6' }
+    ],
+    'Case Studies': [
+      { title: `Successful ${domain} projects`, description: `Case studies of innovation deployment in similar contexts`, url: 'https://example.com/demo-search-7' }
+    ],
+    'Market Analysis': [
+      { title: `${country} ${domain} market`, description: `Market dynamics and investment opportunities in the sector`, url: 'https://example.com/demo-search-8' }
+    ],
+    'Technology Companies': [
+      { title: `${domain} solution providers`, description: `Leading technology vendors and platforms serving the sector`, url: 'https://example.com/demo-search-9' }
+    ],
+    'World Bank Innovation': [
+      { title: `World Bank innovation projects in ${country}`, description: `Related innovation initiatives and digital development projects`, url: 'https://example.com/demo-search-10' }
+    ],
+    'Research Publications': [
+      { title: `${domain} innovation research`, description: `Academic and industry research on technology adoption and impact`, url: 'https://example.com/demo-search-11' }
+    ]
+  };
+
   return {
     projectId: project.id,
     success: true,
+    web_search_results: mockWebSearchResults,
     emerging_tech: {
       score: Math.round(techScore * 10) / 10,
       technologies,
@@ -268,35 +300,35 @@ async function scoreWithAI(project: Project, prompt: string, model: string, apiK
   const searches = [
     {
       name: 'Emerging Technology',
-      query: `"${sectorName}" "${country}" AI machine learning IoT blockchain digital innovation 2024 2025 technology adoption`
+      query: `\"${sectorName}\" \"${country}\" AI machine learning IoT blockchain digital innovation 2024 2025 technology adoption`
     },
     {
       name: 'Innovation Ecosystem',
-      query: `"${country}" "${domain}" innovation ecosystem startup accelerator tech hub incubator challenge hackathon`
+      query: `\"${country}\" \"${domain}\" innovation ecosystem startup accelerator tech hub incubator challenge hackathon`
     },
     {
       name: 'Future Trends',
-      query: `"${sectorName}" future trends 2030 disruption forecast "${country}" development digital transformation`
+      query: `\"${sectorName}\" future trends 2030 disruption forecast \"${country}\" development digital transformation`
     },
     {
       name: 'Case Studies',
-      query: `"${domain}" "${country}" case study implementation success pilot project technology deployment`
+      query: `\"${domain}\" \"${country}\" case study implementation success pilot project technology deployment`
     },
     {
       name: 'Market Analysis',
-      query: `"${country}" "${sectorName}" market analysis innovation investment funding startup companies`
+      query: `\"${country}\" \"${sectorName}\" market analysis innovation investment funding startup companies`
     },
     {
       name: 'Technology Companies',
-      query: `"${domain}" technology companies "${country}" vendors solutions providers platforms startups`
+      query: `\"${domain}\" technology companies \"${country}\" vendors solutions providers platforms startups`
     },
     {
       name: 'World Bank Innovation',
-      query: `"World Bank" "${country}" "${domain}" innovation technology digital development project`
+      query: `\"World Bank\" \"${country}\" \"${domain}\" innovation technology digital development project`
     },
     {
       name: 'Research Publications',
-      query: `"${sectorName}" "${country}" research report whitepaper study analysis innovation technology 2023 2024`
+      query: `\"${sectorName}\" \"${country}\" research report whitepaper study analysis innovation technology 2023 2024`
     }
   ];
 
