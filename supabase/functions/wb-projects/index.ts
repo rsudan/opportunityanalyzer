@@ -97,8 +97,8 @@ Deno.serve(async (req: Request) => {
 
     // Paginate the filtered results
     const totalFiltered = projectsArray.length;
-    const startIdx = 0;
-    const endIdx = Math.min(requestedPageSize, projectsArray.length);
+    const startIdx = (page - 1) * requestedPageSize;
+    const endIdx = Math.min(startIdx + requestedPageSize, projectsArray.length);
     const paginatedProjects = projectsArray.slice(startIdx, endIdx);
 
     console.log(`Returning ${paginatedProjects.length} projects (total filtered: ${totalFiltered})`);

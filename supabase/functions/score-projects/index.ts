@@ -55,43 +55,97 @@ function extractDomain(project: Project): string {
 
 async function performWebSearch(query: string, count: number = 10): Promise<SearchResult[]> {
   try {
-    // Using DuckDuckGo HTML scraping (no API key required)
-    const searchUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
+    console.log(`Performing thorough search: ${query}`);
 
-    console.log(`Searching: ${query}`);
+    // Use SearXNG public instance for better results
+    const searxUrl = `https://searx.be/search?q=${encodeURIComponent(query)}&format=json&engines=google,bing,duckduckgo&categories=general`;
 
-    const response = await fetch(searchUrl, {
+    const response = await fetch(searxUrl, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'application/json'
       }
     });
 
     if (!response.ok) {
-      console.warn(`Search failed for: ${query}`);
-      return [];
+      console.warn(`Search failed with status ${response.status}, falling back to alternative`);
+      return await fallbackSearch(query, count);
     }
 
-    const html = await response.text();
-
-    // Parse results from HTML
+    const data = await response.json();
     const results: SearchResult[] = [];
-    const resultRegex = /<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>([^<]+)<\/a>[\s\S]*?<a[^>]+class="result__snippet"[^>]*>([^<]+)<\/a>/g;
 
-    let match;
-    let resultCount = 0;
-    while ((match = resultRegex.exec(html)) !== null && resultCount < count) {
-      results.push({
-        url: match[1],
-        title: match[2].trim(),
-        description: match[3].trim()
-      });
-      resultCount++;
+    if (data.results && Array.isArray(data.results)) {
+      for (let i = 0; i < Math.min(count, data.results.length); i++) {
+        const result = data.results[i];
+        if (result.url && result.title) {
+          results.push({
+            url: result.url,
+            title: result.title,
+            description: result.content || result.title
+          });
+        }
+      }
     }
 
     console.log(`Found ${results.length} results for: ${query}`);
     return results;
   } catch (error) {
     console.error(`Search error for "${query}":`, error);
+    return await fallbackSearch(query, count);
+  }
+}
+
+async function fallbackSearch(query: string, count: number): Promise<SearchResult[]> {
+  try {
+    // Fallback to DuckDuckGo Lite API
+    const ddgUrl = `https://lite.duckduckgo.com/lite/?q=${encodeURIComponent(query)}`;
+
+    const response = await fetch(ddgUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      }
+    });
+
+    if (!response.ok) {
+      console.warn(`Fallback search also failed`);
+      return [];
+    }
+
+    const html = await response.text();
+    const results: SearchResult[] = [];
+
+    // Parse DuckDuckGo Lite results - simpler HTML structure
+    const linkRegex = /<a[^>]+href="([^"]+)"[^>]*class="result-link"[^>]*>([^<]+)<\/a>/g;
+    const snippetRegex = /<td[^>]+class="result-snippet"[^>]*>([^<]+)<\/td>/g;
+
+    const links: Array<{url: string, title: string}> = [];
+    let linkMatch;
+    while ((linkMatch = linkRegex.exec(html)) !== null && links.length < count) {
+      links.push({
+        url: linkMatch[1],
+        title: linkMatch[2].trim()
+      });
+    }
+
+    const snippets: string[] = [];
+    let snippetMatch;
+    while ((snippetMatch = snippetRegex.exec(html)) !== null && snippets.length < count) {
+      snippets.push(snippetMatch[1].trim());
+    }
+
+    for (let i = 0; i < Math.min(links.length, count); i++) {
+      results.push({
+        url: links[i].url,
+        title: links[i].title,
+        description: snippets[i] || links[i].title
+      });
+    }
+
+    console.log(`Fallback found ${results.length} results`);
+    return results;
+  } catch (error) {
+    console.error(`Fallback search error:`, error);
     return [];
   }
 }
@@ -212,37 +266,57 @@ async function scoreWithAI(project: Project, prompt: string, model: string, apiK
   // Perform comprehensive web searches
   console.log('Conducting web research...');
 
+  // Create specific, detailed search queries
+  const projectKeywords = project.project_name.toLowerCase().split(' ').filter(w => w.length > 4).slice(0, 3).join(' ');
+  const sectorName = project.sector1?.Name || domain;
+
   const searches = [
     {
       name: 'Emerging Technology',
-      query: `${domain} ${country} emerging technology AI blockchain IoT digital transformation 2024 2025`
+      query: `"${sectorName}" "${country}" AI machine learning IoT blockchain digital innovation 2024 2025 technology adoption`
     },
     {
       name: 'Innovation Ecosystem',
-      query: `${country} ${domain} innovation challenge hackathon startup accelerator ecosystem`
+      query: `"${country}" "${domain}" innovation ecosystem startup accelerator tech hub incubator challenge hackathon`
     },
     {
       name: 'Future Trends',
-      query: `${domain} future trends 2030 disruption transformation ${country} forecast`
+      query: `"${sectorName}" future trends 2030 disruption forecast "${country}" development digital transformation`
     },
     {
-      name: 'Technology Applications',
-      query: `${domain} technology applications ${country} case studies success stories`
+      name: 'Case Studies',
+      query: `"${domain}" "${country}" case study implementation success pilot project technology deployment`
+    },
+    {
+      name: 'Market Analysis',
+      query: `"${country}" "${sectorName}" market analysis innovation investment funding startup companies`
+    },
+    {
+      name: 'Technology Companies',
+      query: `"${domain}" technology companies "${country}" vendors solutions providers platforms startups`
     },
     {
       name: 'World Bank Innovation',
-      query: `World Bank ${domain} innovation lab technology ${country}`
+      query: `"World Bank" "${country}" "${domain}" innovation technology digital development project`
+    },
+    {
+      name: 'Research Publications',
+      query: `"${sectorName}" "${country}" research report whitepaper study analysis innovation technology 2023 2024`
     }
   ];
 
   const searchResults: Record<string, SearchResult[]> = {};
 
   for (const search of searches) {
-    const results = await performWebSearch(search.query, 8);
+    const results = await performWebSearch(search.query, 10);
     searchResults[search.name] = results;
-    // Small delay to avoid rate limiting
-    await new Promise(resolve => setTimeout(resolve, 500));
+    console.log(`Completed ${search.name}: ${results.length} results`);
+    // Delay to avoid rate limiting
+    await new Promise(resolve => setTimeout(resolve, 800));
   }
+
+  const totalResults = Object.values(searchResults).reduce((sum, results) => sum + results.length, 0);
+  console.log(`Total search results collected: ${totalResults}`);
 
   // Build enriched prompt with actual search results
   const searchContext = Object.entries(searchResults)
